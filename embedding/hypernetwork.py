@@ -3,10 +3,10 @@ import os
 import os.path as osp
 
 
-def create_hypernetwork(url, category_name, enable_sizes=[768, 320, 640, 1280], overwrite_old: bool = True,
+def create_hypernetwork(url, sd_path, category_name, enable_sizes=[768, 320, 640, 1280], overwrite_old: bool = True,
                         layer_structure=[1, 2, 1], activation_func="relu", weight_init="Normal"):
     print(f"Create hypernetwork {category_name}.pt")
-    expected_path = osp.join(osp.abspath('..'), 'stable-diffusion-webui', 'models', 'hypernetworks', f"{category_name}.pt")
+    expected_path = osp.join(sd_path, 'models', 'hypernetworks', f"{category_name}.pt")
     if osp.exists(expected_path) and not overwrite_old:
         print(f"Hypernetwork {category_name}.pt already exists! Skip this step...")
         return expected_path

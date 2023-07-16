@@ -8,12 +8,13 @@ def create_parser():
     parser = argparse.ArgumentParser(description='Deep active learning args --PyTorch ')
 
     # 与stable diffusion相关的配置
-    parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7860", type=str,
+    parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7867", type=str,
                         help='the url of stable diffusion')
     parser.add_argument('--categories', default=['sidewinder'], type=str,
                         nargs='+', help='categories to train, choose from '
                                         'axolotl, crampfish, emperor_penguin_chick, frilled_lizard, garfish, '
                                         'indian_cobra, king_penguin_chick, lycorma_delicatula, sidewinder, xylotrechus')
+    parser.add_argument('--stable-diffusion-model-path', default="/storage/home/lanzhenzhongLab/yangjianan/yangjianan/stable-diffusion-webui", type=str, help='the path of the sd model in this server')
 
     # 与存储相关的必要信息
     parser.add_argument('--work-dir', default=None, type=str, help='the dir to save logs and models')
@@ -23,6 +24,7 @@ def create_parser():
     # 常规深度模型训练配置
     parser.add_argument('--dataset', type=str, default='MyImageFolder', metavar='DATASET',
                         help='The name of the used dataset(default: MyImageFolder)')
+    parser.add_argument('--dataset-path', type=str, default="/storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset", help="the path of the data to be used")
     parser.add_argument('--cls-load-path', type=str, default=None, help='which pth file to preload')
     parser.add_argument('--scoring-load-path', type=str, default=None, help='which pth file to preload')
 
@@ -30,7 +32,7 @@ def create_parser():
     parser.add_argument('--strategy', type=str, default='ScoreBasedSampling',
                         help='which sampling strategy to choose')
     parser.add_argument('--n-cycle', default=5, type=int,
-                        metavar='N', help='number of query rounds(default: 10)')
+                        metavar='N', help='number of query rounds(default: 10), used: 5')
     parser.add_argument('--num-query', default=100, type=int,
                         metavar='N', help='number of query samples per epoch(default: 1000)')
     parser.add_argument('--subset', default=10000, type=int,
@@ -39,9 +41,9 @@ def create_parser():
 
     # 分类模型训练配置
     parser.add_argument('--cls-n-epoch', default=5, type=int, metavar='N',
-                        help='number of total training epochs(default: 100)')
+                        help='number of total training epochs(default: 100), used: 5')
     parser.add_argument('--cls-batch-size', type=int, default=64, metavar='BATCH_SIZE',
-                        help='Batch size in both train and test phase(default: 64)')  # 16384
+                        help='Batch size in both train and test phase(default: 64), used: 64')  # 16384
     parser.add_argument('--cls-num-workers', default=0, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--cls-optim-type', default='adam', type=str, metavar='CLS_OPTIM_NAME',
@@ -53,9 +55,9 @@ def create_parser():
 
     # 打分模型训练配置
     parser.add_argument('--scoring-n-epoch', default=5, type=int, metavar='N',
-                        help='number of total training epochs(default: 100)')
+                        help='number of total training epochs(default: 100), used 5')
     parser.add_argument('--scoring-batch-size', type=int, default=256, metavar='BATCH_SIZE',
-                        help='Batch size in both train and test phase(default: 64)')
+                        help='Batch size in both train and test phase(default: 64), used: 256')
     parser.add_argument('--scoring-num-workers', default=0, type=int, metavar='N',
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--scoring-optim-type', default='adam', type=str, metavar='SCORE_OPTIM_NAME',
@@ -90,6 +92,11 @@ def create_parser():
     parser.add_argument('--save-hypernetwork-every', default=5, type=int)
     parser.add_argument('--hypernetwork-learn-rate', default=[5e-6, 2.5e-6, 7.5e-7, 5e-7, 2.5e-7], type=float,
                         nargs='+', help='learning rate to use in hypernetwork training')
+    
+    # memory bank相关配置
+    parser.add_argument('--memory-bank-path', type=str, default='/storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/memorybank')
+    parser.add_argument('--mb-save-num',type=int, default=50, help='every time select mb_save_num images to store')
+    parser.add_argument('--mb-load-num',type=int, default=50, help='every time select mb_load_num images to load')
 
     return parser
 

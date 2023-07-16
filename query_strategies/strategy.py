@@ -22,15 +22,17 @@ import csv
 from evaluation import inception_score, IgnoreLabelDataset
 from pytorch_fid.fid_score import calculate_fid_given_paths
 from PIL import ImageFile
+import shutil
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 @STRATEGIES.register_module()
 class Strategy:
-    def __init__(self, dataset: BaseDataset, args, logger, timestamp, work_dir):
+    def __init__(self, dataset: BaseDataset, args, logger, timestamp, work_dir, sd_path):
         self.dataset = dataset
         self.args = args
         self.work_dir = work_dir
+        self.sd_path = sd_path
         # Model
         self.cls_net, self.cls_optimizer, self.cls_scheduler = \
             get_initialized_cls_module(self.args.cls_lr, self.args.cls_momentum,
@@ -58,13 +60,23 @@ class Strategy:
         self.num_labels_list = []
         self.TextLogger._dump_log(vars(args))
         self.pre_score()
+        
+        # use memory bank
+        self.mb_setup(
+            data_path=os.path.join(self.dataset.DATA_PATH, "training_dataset"),
+            category=self.dataset.CLASSES[0],
+            gt_label=0,
+            mb_load_num=self.args.mb_load_num,
+            mb_save_num=self.args.mb_save_num,
+            mb_path=self.args.memory_bank_path
+        )
+        self.merge_mb(split='train')
 
     def init_models(self):
         """When we want to initialize the model we use, apply this function.
         Random parameter initialization is included.
         """
         self.cls_net, self.cls_optimizer, self.cls_scheduler = \
-            self.cls_net, self.cls_optimizer, self.cls_scheduler = \
             get_initialized_cls_module(self.args.cls_lr, self.args.cls_momentum,
                                        self.args.cls_weight_decay,
                                        self.args.cls_optim_type,
@@ -78,7 +90,7 @@ class Strategy:
     def pre_score(self, split=None):
         if split is None:
             for temp_split in self.dataset.DATA_INFOS.keys():
-                if temp_split in ['train', 'train_full', 'train_u', 'val']:
+                if temp_split in ['train', 'train_full', 'train_u', 'val', 'train_generated']:
                     continue
                 if temp_split not in ['train_init_main_category']:
                     score_list = self.predict(self.scoring_net, split=temp_split, metric='aesthetic_score')
@@ -130,16 +142,16 @@ class Strategy:
             x, y = torch.squeeze(x, 1).cuda(), y.cuda()
             if x.shape[0] <= 1:
                 break
-            clf_group['optimizer'].zero_grad()
-            out = clf_group['clf'](x)
+            clf_group['optimizer'].zero_grad()  #模型参数梯度初始化为0
+            out = clf_group['clf'](x)   # 前向传播计算预测值
             pred = out.max(1)[1]
             right_count_list.append((pred == y).sum().item())
             samples_per_batch.append(len(y))
-            loss = F.cross_entropy(out, y)
+            loss = F.cross_entropy(out, y)  # 计算当前损失
 
             loss_list.append(loss.item())
-            loss.backward()
-            clf_group['optimizer'].step()
+            loss.backward()     #反向传播计算梯度
+            clf_group['optimizer'].step() # 更新所有的参数
             iter_time = self.timer.since_last_check()
             if log_show:
                 if (batch_idx + 1) % iter_out == 0:
@@ -232,53 +244,63 @@ class Strategy:
         # self.save()
         self.cls_net.eval()
         self.scoring_net.eval()
-
+        
     def _embedding_train(self, cycle, temp_processed_path):
-        embedding_iters = 0
-        create_embedding(self.args.stable_diffusion_url, self.dataset.CLASSES[0], overwrite_old=True)
-        os.makedirs(os.path.join(os.path.abspath('.'),
-                                 self.work_dir, f'active_round_{cycle}', "embedding"), mode=0o777, exist_ok=True)
-        for lr in self.args.embedding_learn_rate:
-            self.logger.info(f"Training with learning rate {lr} at cycle {cycle}!")
-            embedding_path_list, image_path_list = \
-                embedding_training(self.args.stable_diffusion_url,
-                                   self.dataset.CLASSES[0],
-                                   learn_rate=lr,
-                                   data_root=temp_processed_path,
-                                   log_directory=os.path.join(os.path.abspath('.'),
-                                                              self.work_dir, f'active_round_{cycle}', "embedding"),
-                                   steps=embedding_iters + self.args.embedding_steps_per_lr,
-                                   initial_step=embedding_iters,
-                                   save_embedding_every=self.args.save_embedding_every,
-                                   template_file=os.path.join("textual_inversion_templates", "style_filewords.txt"),
-                                   preview_prompt=f"a_photo_of_{self.dataset.CLASSES[0]}, "
-                                                  f"{self.dataset.CLASSES[0]}, real_life")
-            # 接下来筛选最优embedding
-            self.dataset.DATA_INFOS['temp'] = [{'no': i, 'img': path, 'gt_label': 0, 'aesthetic_score': 0.
-                                                } for i, path in enumerate(image_path_list)]
-            aesthetic_score_list = self.predict(self.scoring_net, split='temp', metric='aesthetic_score')
-            tag_matching_score_list = self.predict(self.cls_net, split='temp', metric='tag_matching_score')
-            total_score_list = aesthetic_score_list + tag_matching_score_list
-            best_idx = torch.argmax(total_score_list).item()
-            embedding_iters = embedding_iters + self.args.embedding_steps_per_lr
-            # 选择完毕，移动最佳embedding替换，删除多余的embedding
-            embedding_pt_dict = torch.load(embedding_path_list[best_idx])
-            embedding_pt_dict['name'] = self.dataset.CLASSES[0]
-            dsc_file = os.path.join(os.path.abspath(".."),
-                                    "stable-diffusion-webui", "embeddings", f"{self.dataset.CLASSES[0]}.pt")
-            os.remove(dsc_file)
-            # shutil.copy(embedding_path_list[best_idx], dsc_file)
-            torch.save(embedding_pt_dict, dsc_file)
-            """
-            for del_idx in range(best_idx + 1, self.args.embedding_steps_per_lr // self.args.save_embedding_every):
-                os.remove(image_path_list[del_idx])
-                os.remove(embedding_path_list[del_idx])
-            """
-            del self.dataset.DATA_INFOS['temp']
+        pass
+
+    # def _embedding_train(self, cycle, temp_processed_path):
+    #     embedding_iters = 0
+    #     create_embedding(self.args.stable_diffusion_url, self.sd_path, self.dataset.CLASSES[0], overwrite_old=True)
+    #     os.makedirs(os.path.join(os.path.abspath('.'),
+    #                              self.work_dir, f'active_round_{cycle}', "embedding"), mode=0o777, exist_ok=True)
+        
+    #     first_flag=True
+    #     for lr in self.args.embedding_learn_rate:
+    #         self.logger.info(f"Training with learning rate {lr} at cycle {cycle}!")
+    #         embedding_path_list, image_path_list = \
+    #             embedding_training(self.args.stable_diffusion_url,
+    #                                self.dataset.CLASSES[0],
+    #                                learn_rate=lr,
+    #                                data_root=temp_processed_path,
+    #                                log_directory=os.path.join(os.path.abspath('.'),
+    #                                                           self.work_dir, f'active_round_{cycle}', "embedding"),
+    #                                steps=embedding_iters + self.args.embedding_steps_per_lr,
+    #                                initial_step=embedding_iters,
+    #                                save_embedding_every=self.args.save_embedding_every,
+    #                                template_filename="style_filewords.txt",
+    #                                preview_prompt=f"a_photo_of_{self.dataset.CLASSES[0]}, "
+    #                                               f"{self.dataset.CLASSES[0]}, real_life")
+    #         # 接下来筛选最优embedding
+    #         self.dataset.DATA_INFOS['temp'] = [{'no': i, 'img': path, 'gt_label': 0, 'aesthetic_score': 0.
+    #                                             } for i, path in enumerate(image_path_list)]
+    #         aesthetic_score_list = self.predict(self.scoring_net, split='temp', metric='aesthetic_score')
+    #         tag_matching_score_list = self.predict(self.cls_net, split='temp', metric='tag_matching_score')
+    #         embedding_iters = embedding_iters + self.args.embedding_steps_per_lr
+    #         total_score_list = aesthetic_score_list + tag_matching_score_list
+    #         best_idx = torch.argmax(total_score_list).item()
+    #         if first_flag:
+    #             best_score = total_score_list[best_idx]
+    #             first_flag=False
+    #         elif total_score_list[best_idx] >= best_score:
+    #             best_score=total_score_list[best_idx]
+            
+    #             # 选择完毕，移动最佳embedding替换，删除多余的embedding
+    #             embedding_pt_dict = torch.load(embedding_path_list[best_idx])
+    #             embedding_pt_dict['name'] = self.dataset.CLASSES[0]
+    #             dsc_file = os.path.join(self.sd_path, "embeddings", f"{self.dataset.CLASSES[0]}.pt")
+    #             os.remove(dsc_file)
+    #             # shutil.copy(embedding_path_list[best_idx], dsc_file)
+    #             torch.save(embedding_pt_dict, dsc_file)
+    #             """
+    #             for del_idx in range(best_idx + 1, self.args.embedding_steps_per_lr // self.args.save_embedding_every):
+    #                 os.remove(image_path_list[del_idx])
+    #                 os.remove(embedding_path_list[del_idx])
+    #             """
+    #         del self.dataset.DATA_INFOS['temp']
 
     def _hypernetwork_train(self, cycle, temp_processed_path):
         hypernetwork_iters = 0
-        create_hypernetwork(self.args.stable_diffusion_url, self.dataset.CLASSES[0], overwrite_old=True)
+        create_hypernetwork(self.args.stable_diffusion_url, self.sd_path, self.dataset.CLASSES[0], overwrite_old=True)
         os.makedirs(os.path.join(os.path.abspath('.'),
                                  self.work_dir, f'active_round_{cycle}', "hypernetwork"), mode=0o777, exist_ok=True)
         for lr in self.args.hypernetwork_learn_rate:
@@ -309,8 +331,7 @@ class Strategy:
             # 选择完毕，移动最佳embedding替换，删除多余的embedding
             hypernetwork_pt_dict = torch.load(hypernetwork_path_list[best_idx])
             hypernetwork_pt_dict['name'] = self.dataset.CLASSES[0]
-            dsc_file = os.path.join(os.path.abspath(".."),
-                                    "stable-diffusion-webui", "models", "hypernetworks", f"{self.dataset.CLASSES[0]}.pt")
+            dsc_file = os.path.join(self.sd_path, "models", "hypernetworks", f"{self.dataset.CLASSES[0]}.pt")
             os.remove(dsc_file)
             # shutil.copy(hypernetwork_path_list[best_idx], dsc_file)
             torch.save(hypernetwork_pt_dict, dsc_file)
@@ -383,6 +404,10 @@ class Strategy:
             self.cycle += 1
 
         self.record_evaluation_results()
+        self.mb_store(
+            category=self.dataset.CLASSES[0], 
+            split='train'
+        )
 
     def predict(self, clf, split='train', metric='accuracy',
                 topk=None, n_drop=None, thrs=None, dropout_split=False, log_show=True):
@@ -580,3 +605,80 @@ class Strategy:
                                 self.is_score_list[i],
                                 self.fid_score_list[i],
                                 self.classifier_score_list[i]])
+
+    #####################  memory bank mechanism realization  ########################
+    def mb_setup(self, data_path, category, gt_label, mb_load_num, mb_save_num, mb_path=None): #data_path是指到train_dataset
+        self.mb_path = mb_path
+        self.mb_load_num = mb_load_num
+        self.mb_save_num = mb_save_num
+        if not os.path.exists(self.mb_path) or self.mb_path==None:
+            print('[Memory Bank Path ERROR] Please Specify Your Memory Bank Path!')
+            exit(1)
+        
+        if os.path.exists(os.path.join(self.mb_path, category)):
+            self.mb_load(data_path=data_path, category=category, gt_label=gt_label)
+        else:
+            os.makedirs(os.path.join(self.mb_path, category))
+        
+        
+    def mb_store(self, category, split='train'): # select top mb_selected_num images and save them to the memory bank
+        split_length = len(self.dataset.DATA_INFOS[split])
+        idxs = np.arange(split_length)
+        aesthetic_scores=self.predict(self.scoring_net, split=split, metric='aesthetic_score')
+        classifier_scores=self.predict(self.cls_net, split=split, metric='tag_matching_score')
+        total_scores = (aesthetic_scores + classifier_scores).sort()[1].cpu().numpy() #[1]表示的是使用返回值的索引
+        idxs_tostore = idxs[total_scores[-self.mb_save_num:]]
+        
+        aesthetic_scores = aesthetic_scores.cpu().numpy()
+        classifier_scores = classifier_scores.cpu().numpy()
+        
+        store_path = os.path.join(self.mb_path, category)
+        if not os.path.exists(store_path):
+            os.makedirs(store_path, mode=0o777, exist_ok=True)
+        
+        img_score_match_list = []
+        for i in idxs_tostore:
+            no = self.dataset.DATA_INFOS[split][i]['no']
+            image_path = self.dataset.DATA_INFOS[split][i]['img']
+            image_name = os.path.basename(image_path)
+            shutil.copy(image_path, store_path)
+            moved_image_path = os.path.join(store_path, image_name)
+            img_score_match_list.append(
+                (no, moved_image_path, aesthetic_scores[i], classifier_scores[i])
+            )
+        
+        np.savez(os.path.join(store_path, 'img_score_match_list'), img_score_match_list)
+            
+        print('memory bank has been refreshed')
+            
+    def mb_load(self, data_path : str, category : str, gt_label : int):
+        des_path = os.path.join(data_path, category)
+        load_path = os.path.join(self.mb_path, category)
+        _lst = np.load(os.path.join(load_path, 'img_score_match_list.npz'), allow_pickle=True)
+        arr_0 = _lst['arr_0']
+        img_score_match_list = []
+        for i in arr_0:
+            img_score_match_list.append(i)
+        img_score_match_list = sorted(img_score_match_list, key=lambda x: x[2]+x[3], reverse=True)
+        self.dataset.DATA_INFOS['memory_bank_category'] = []
+        for idx in range(min(self.mb_load_num, len(img_score_match_list))):
+            no = img_score_match_list[idx][0]
+            image_path = img_score_match_list[idx][1]
+            image_name = os.path.basename(image_path)
+            shutil.copy(image_path, des_path)
+            moved_image_path = os.path.join(des_path, image_name)
+            aesthetic_score = img_score_match_list[idx][2]
+            self.dataset.DATA_INFOS['memory_bank_category'].append(
+                {'no': int(no), 'img': moved_image_path, 'gt_label':gt_label, 'aesthetic_score':float(aesthetic_score)}
+            )
+        print("memory bank load successful!")
+        fp=open("memory_bank_category.txt", "w")
+        print(self.dataset.DATA_INFOS['memory_bank_category'], file=fp)
+        fp.close()
+        
+        
+    def merge_mb(self, split='train'):
+        if 'memory_bank_category' in self.dataset.DATA_INFOS.keys():
+            self.dataset.DATA_INFOS[split] += self.dataset.DATA_INFOS['memory_bank_category']
+        else:
+            print('First Time Run No Memory Bank Yet')

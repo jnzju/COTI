@@ -25,7 +25,7 @@ class MyImageFolder(BaseDataset):
 
     def load_data(self):
         if self.DATA_PATH is None:
-            self.DATA_PATH = osp.join(os.path.abspath('..'), 'data', 'stable_diffusion_dataset')
+            print("[Data Path ERROR] Please Specify Your Data Location!")
         data_path_full = osp.join(self.DATA_PATH, 'training_dataset')
         data_path_initial = osp.join(self.DATA_PATH, 'training_dataset_initial')
         self.raw_full = datasets.ImageFolder(data_path_full)
@@ -59,8 +59,9 @@ class MyImageFolder(BaseDataset):
                     num_samples=self.initial_generated_images_per_class, temp_dir=generated_dataset_path_category)
         # 读取生成样本
         self.raw_generated = datasets.ImageFolder(osp.join(generated_dataset_path))
+        num_gen=len(self.raw_generated.targets)
         self.DATA_INFOS['train_generated'] = [{'no': i, 'img': self.raw_generated.imgs[i][0],
-                                               'gt_label': self.raw_generated.targets[i]} for i in range(num_init)]
+                                               'gt_label': self.raw_generated.targets[i]} for i in range(num_gen)]
 
     # Only used for loading data
     def prepare_data(self, idx, split, transform=None, aug_transform=None):

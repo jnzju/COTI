@@ -56,7 +56,7 @@ def run(config: dict = None):
 
     # load dataset
     dataset = DATASETS.build(
-        dict(type=config.dataset, subset=config.subset,
+        dict(type=config.dataset, data_path=config.dataset_path, subset=config.subset,
              initial_generated_images_per_class=config.initial_generated_images_per_class,
              url=config.stable_diffusion_url))
 
@@ -88,7 +88,8 @@ def run(config: dict = None):
                                          dataset=sub_dataset,
                                          args=config,
                                          logger=logger, timestamp=timestamp,
-                                         work_dir=sub_workdir))
+                                         work_dir=sub_workdir,
+                                         sd_path=config.stable_diffusion_model_path))
 
         # print info
         logger.info('Dataset: {}'.format(config.dataset + "_" + class_name))
