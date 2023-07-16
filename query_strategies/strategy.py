@@ -244,59 +244,56 @@ class Strategy:
         # self.save()
         self.cls_net.eval()
         self.scoring_net.eval()
-        
-    def _embedding_train(self, cycle, temp_processed_path):
-        pass
 
-    # def _embedding_train(self, cycle, temp_processed_path):
-    #     embedding_iters = 0
-    #     create_embedding(self.args.stable_diffusion_url, self.sd_path, self.dataset.CLASSES[0], overwrite_old=True)
-    #     os.makedirs(os.path.join(os.path.abspath('.'),
-    #                              self.work_dir, f'active_round_{cycle}', "embedding"), mode=0o777, exist_ok=True)
+    def _embedding_train(self, cycle, temp_processed_path):
+        embedding_iters = 0
+        create_embedding(self.args.stable_diffusion_url, self.sd_path, self.dataset.CLASSES[0], overwrite_old=True)
+        os.makedirs(os.path.join(os.path.abspath('.'),
+                                 self.work_dir, f'active_round_{cycle}', "embedding"), mode=0o777, exist_ok=True)
         
-    #     first_flag=True
-    #     for lr in self.args.embedding_learn_rate:
-    #         self.logger.info(f"Training with learning rate {lr} at cycle {cycle}!")
-    #         embedding_path_list, image_path_list = \
-    #             embedding_training(self.args.stable_diffusion_url,
-    #                                self.dataset.CLASSES[0],
-    #                                learn_rate=lr,
-    #                                data_root=temp_processed_path,
-    #                                log_directory=os.path.join(os.path.abspath('.'),
-    #                                                           self.work_dir, f'active_round_{cycle}', "embedding"),
-    #                                steps=embedding_iters + self.args.embedding_steps_per_lr,
-    #                                initial_step=embedding_iters,
-    #                                save_embedding_every=self.args.save_embedding_every,
-    #                                template_filename="style_filewords.txt",
-    #                                preview_prompt=f"a_photo_of_{self.dataset.CLASSES[0]}, "
-    #                                               f"{self.dataset.CLASSES[0]}, real_life")
-    #         # 接下来筛选最优embedding
-    #         self.dataset.DATA_INFOS['temp'] = [{'no': i, 'img': path, 'gt_label': 0, 'aesthetic_score': 0.
-    #                                             } for i, path in enumerate(image_path_list)]
-    #         aesthetic_score_list = self.predict(self.scoring_net, split='temp', metric='aesthetic_score')
-    #         tag_matching_score_list = self.predict(self.cls_net, split='temp', metric='tag_matching_score')
-    #         embedding_iters = embedding_iters + self.args.embedding_steps_per_lr
-    #         total_score_list = aesthetic_score_list + tag_matching_score_list
-    #         best_idx = torch.argmax(total_score_list).item()
-    #         if first_flag:
-    #             best_score = total_score_list[best_idx]
-    #             first_flag=False
-    #         elif total_score_list[best_idx] >= best_score:
-    #             best_score=total_score_list[best_idx]
+        first_flag=True
+        for lr in self.args.embedding_learn_rate:
+            self.logger.info(f"Training with learning rate {lr} at cycle {cycle}!")
+            embedding_path_list, image_path_list = \
+                embedding_training(self.args.stable_diffusion_url,
+                                   self.dataset.CLASSES[0],
+                                   learn_rate=lr,
+                                   data_root=temp_processed_path,
+                                   log_directory=os.path.join(os.path.abspath('.'),
+                                                              self.work_dir, f'active_round_{cycle}', "embedding"),
+                                   steps=embedding_iters + self.args.embedding_steps_per_lr,
+                                   initial_step=embedding_iters,
+                                   save_embedding_every=self.args.save_embedding_every,
+                                   template_filename="style_filewords.txt",
+                                   preview_prompt=f"a_photo_of_{self.dataset.CLASSES[0]}, "
+                                                  f"{self.dataset.CLASSES[0]}, real_life")
+            # 接下来筛选最优embedding
+            self.dataset.DATA_INFOS['temp'] = [{'no': i, 'img': path, 'gt_label': 0, 'aesthetic_score': 0.
+                                                } for i, path in enumerate(image_path_list)]
+            aesthetic_score_list = self.predict(self.scoring_net, split='temp', metric='aesthetic_score')
+            tag_matching_score_list = self.predict(self.cls_net, split='temp', metric='tag_matching_score')
+            embedding_iters = embedding_iters + self.args.embedding_steps_per_lr
+            total_score_list = aesthetic_score_list + tag_matching_score_list
+            best_idx = torch.argmax(total_score_list).item()
+            if first_flag:
+                best_score = total_score_list[best_idx]
+                first_flag=False
+            elif total_score_list[best_idx] >= best_score:
+                best_score=total_score_list[best_idx]
             
-    #             # 选择完毕，移动最佳embedding替换，删除多余的embedding
-    #             embedding_pt_dict = torch.load(embedding_path_list[best_idx])
-    #             embedding_pt_dict['name'] = self.dataset.CLASSES[0]
-    #             dsc_file = os.path.join(self.sd_path, "embeddings", f"{self.dataset.CLASSES[0]}.pt")
-    #             os.remove(dsc_file)
-    #             # shutil.copy(embedding_path_list[best_idx], dsc_file)
-    #             torch.save(embedding_pt_dict, dsc_file)
-    #             """
-    #             for del_idx in range(best_idx + 1, self.args.embedding_steps_per_lr // self.args.save_embedding_every):
-    #                 os.remove(image_path_list[del_idx])
-    #                 os.remove(embedding_path_list[del_idx])
-    #             """
-    #         del self.dataset.DATA_INFOS['temp']
+                # 选择完毕，移动最佳embedding替换，删除多余的embedding
+                embedding_pt_dict = torch.load(embedding_path_list[best_idx])
+                embedding_pt_dict['name'] = self.dataset.CLASSES[0]
+                dsc_file = os.path.join(self.sd_path, "embeddings", f"{self.dataset.CLASSES[0]}.pt")
+                os.remove(dsc_file)
+                # shutil.copy(embedding_path_list[best_idx], dsc_file)
+                torch.save(embedding_pt_dict, dsc_file)
+                """
+                for del_idx in range(best_idx + 1, self.args.embedding_steps_per_lr // self.args.save_embedding_every):
+                    os.remove(image_path_list[del_idx])
+                    os.remove(embedding_path_list[del_idx])
+                """
+            del self.dataset.DATA_INFOS['temp']
 
     def _hypernetwork_train(self, cycle, temp_processed_path):
         hypernetwork_iters = 0
