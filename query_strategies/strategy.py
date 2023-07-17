@@ -604,7 +604,7 @@ class Strategy:
                                 self.classifier_score_list[i]])
 
     #####################  memory bank mechanism realization  ########################
-    def mb_setup(self, data_path, category, gt_label, mb_load_num, mb_save_num, mb_path=None): #data_path是指到train_dataset
+    def mb_setup(self, data_path, category, gt_label, mb_load_num, mb_save_num, mb_path=None): #data_path是指到training_dataset
         self.mb_path = mb_path
         self.mb_load_num = mb_load_num
         self.mb_save_num = mb_save_num
@@ -630,10 +630,15 @@ class Strategy:
         classifier_scores = classifier_scores.cpu().numpy()
         
         store_path = os.path.join(self.mb_path, category)
+        img_score_match_list = []
         if not os.path.exists(store_path):
             os.makedirs(store_path, mode=0o777, exist_ok=True)
+        else:
+            _lst = np.load(os.path.join(store_path, 'img_score_match_list.npz'), allow_pickle=True)
+            arr_0 = _lst['arr_0']
+            for i in arr_0:
+                img_score_match_list.append(i)
         
-        img_score_match_list = []
         for i in idxs_tostore:
             no = self.dataset.DATA_INFOS[split][i]['no']
             image_path = self.dataset.DATA_INFOS[split][i]['img']
@@ -668,7 +673,7 @@ class Strategy:
             self.dataset.DATA_INFOS['memory_bank_category'].append(
                 {'no': int(no), 'img': moved_image_path, 'gt_label':gt_label, 'aesthetic_score':float(aesthetic_score)}
             )
-        print("memory bank load successful!")
+        print("memory bank load successfully!")
         fp=open("memory_bank_category.txt", "w")
         print(self.dataset.DATA_INFOS['memory_bank_category'], file=fp)
         fp.close()
