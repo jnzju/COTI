@@ -9,10 +9,17 @@ def create_parser():
 
     ################## 更换环境之后需要更改的config 项目 #######################
     ''' 
+    --server
     --stable-diffusion-model-path
     --dataset-path
     --memory-bank-path
     '''
+    
+    # server
+    parser.add_argument('--server', default='gpu_school', type=str, 
+                        help=
+                        'gpu25'
+                        'gpu_school')
     
     # 与stable diffusion相关的配置
     parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7867", type=str,
@@ -42,7 +49,7 @@ def create_parser():
     # 主动学习策略选择
     parser.add_argument('--strategy', type=str, default='ScoreBasedSampling',
                         help='which sampling strategy to choose')
-    parser.add_argument('--n-cycle', default=5, type=int,
+    parser.add_argument('--n-cycle', default=2, type=int,
                         metavar='N', help='number of query rounds(default: 10), used: 5')
     parser.add_argument('--num-query', default=100, type=int,
                         metavar='N', help='number of query samples per epoch(default: 1000)')

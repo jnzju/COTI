@@ -10,9 +10,9 @@ from embedding.preprocess import image_preprocess
 
 
 class TwoClassImageFolderSubset(BaseDataset):
-    def __init__(self, father_dataset: MyImageFolder,
+    def __init__(self, server, father_dataset: MyImageFolder,
                  class_idx: int, sub_class_idx: int = None):
-
+        self.server = server
         self.father_dataset = father_dataset
         self.raw_init = None
         self.class_idx = class_idx
@@ -154,7 +154,7 @@ class TwoClassImageFolderSubset(BaseDataset):
         for data_dict in selected_images:
             shutil.copy(data_dict['img'], temp_original_path)
         os.makedirs(temp_processed_path, mode=0o777, exist_ok=True)
-        image_preprocess(url, self.CLASSES[0], temp_original_path, temp_processed_path,
+        image_preprocess(self.server, url, self.CLASSES[0], temp_original_path, temp_processed_path,
                          768, 768, "ignore", False, False, False)
         print("Preprocess done!")
         return temp_processed_path

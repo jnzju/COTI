@@ -248,7 +248,9 @@ class Strategy:
         for lr in self.args.embedding_learn_rate:
             self.logger.info(f"Training with learning rate {lr} at cycle {cycle}!")
             embedding_path_list, image_path_list = \
-                embedding_training(self.args.stable_diffusion_url,
+                embedding_training(self.args.server,
+                                   self.args.stable_diffusion_model_path,
+                                   self.args.stable_diffusion_url,
                                    self.dataset.CLASSES[0],
                                    learn_rate=lr,
                                    data_root=temp_processed_path,
@@ -489,42 +491,36 @@ class Strategy:
                     y_list = []
 
                     with torch.no_grad():
-                        for x, y, _, idxs, _ in track_iter_progress(loader):
+                        for x, _, _, idxs, _ in track_iter_progress(loader):
                             x = torch.squeeze(x, 1).cuda()
                             out = clf(x)
                             pred[idxs] += F.softmax(out, dim=1)
-                            y_list.append(y)
-                    y_list = torch.cat(y_list).cuda()
-                    result = torch.flatten(pred.gather(1, y_list.reshape(-1, 1).cuda()) * 10.0)
+                    result = torch.flatten(pred[:, 0] * 10.0)
                 elif self.args.tag_matching_strategy == 'representation_distance':
-                    pass
+                    pred = torch.zeros([len(self.dataset.DATA_INFOS[split]), len(self.dataset.CLASSES)]).cuda()
+                    with torch.no_grad():
+                        for _, _, _, idxs, _ in track_iter_progress(loader):
+                            num = len(idxs)
+                            image_paths = [self.dataset.DATA_INFOS[split][idxs[i]]['img'] for i in range(num)]
+                            positive_text_input = "a " + self.dataset.CLASSES[0]
+                            sub_text_input = "a " + self.dataset.father_dataset.CLASSES[self.dataset.sub_class_idx]
+                            device = "cuda"
+                            model, preprocess = clip.load("ViT-B/32", device=device)
+                            
+                            for i in range(num):
+                                image = preprocess(Image.open(images_paths[i])).unsqueeze(0).to(device)
+                                text = clip.tokenize([positive_text_input, sub_text_input]).to(device)
+                                logits_per_image, logits_per_text = model(image, text)
+                                pred[idxs[i]] = logits_per_image.softmax(dim=-1)
+                    result = torch.flatten(pred[:, 0] * 10.0)
                 else :
                     raise NotImplementedError
             elif metric == 'r_precision':
-                pred = torch.zeros([len(self.dataset.DATA_INFOS[split]),
-                                    len(self.dataset.CLASSES)]).cuda()
-                y_list = []
-
-                with torch.no_grad():
-                    for x, y, _, idxs, _ in track_iter_progress(loader):
-                        x = torch.squeeze(x, 1).cuda()
-                        out = clf(x)
-                        pred[idxs] += F.softmax(out, dim=1)
-                        y_list.append(y)
-                y_list = torch.cat(y_list).cuda()
-                result = torch.flatten(pred.gather(1, y_list.reshape(-1, 1).cuda()) * 10.0)
+                raise NotImplementedError
             elif metric == 'is':
-                val_generated_data_path = os.path.join(self.work_dir, f"active_round_{self.cycle}", "temp_val_images")
-                imgs = IgnoreLabelDataset(val_generated_data_path)
-                result = torch.tensor(inception_score(imgs, cuda=True, batch_size=1, resize=False, splits=10))
+                raise NotImplementedError
             elif metric == 'fid':
-                val_generated_data_path = os.path.join(self.work_dir, f"active_round_{self.cycle}", "temp_val_images")
-                val_data_path = os.path.join(self.dataset.DATA_PATH, 'training_dataset_initial',
-                                             self.dataset.CLASSES[0])
-                result = calculate_fid_given_paths([val_generated_data_path, val_data_path], batch_size=1,
-                                                    device=torch.device('cuda' if (torch.cuda.is_available()) else 'cpu'),
-                                                    dims=2048, num_workers=1)
-                result = float(result)
+                raise NotImplementedError
             else:
                 raise NotImplementedError
 
@@ -623,10 +619,14 @@ class Strategy:
             print('[Memory Bank Path ERROR] Please Specify Your Memory Bank Path!')
             exit(1)
         
-        if os.path.exists(os.path.join(self.mb_path, category)):
+        if os.path.exists(os.path.join(self.mb_path, category, 'img_score_match_list.npz')):
             self.mb_load(data_path=data_path, category=category, gt_label=gt_label)
+        elif os.path.exists(os.path.join(self.mb_path, category)):
+            print('memorybank/{category} being used is damaged, COTI needs to regenerate it and remove previous image data.')
+            shutil.rmtree(os.path.join(self.mb_path, category))
+            os.makedirs(os.path.join(self.mb_path, category), exist_ok=True)
         else:
-            os.makedirs(os.path.join(self.mb_path, category))
+            os.makedirs(os.path.join(self.mb_path, category), exist_ok=True)
         
         
     def mb_store(self, category, split='train'): # select top mb_selected_num images and save them to the memory bank
@@ -694,4 +694,4 @@ class Strategy:
         if 'memory_bank_category' in self.dataset.DATA_INFOS.keys():
             self.dataset.DATA_INFOS[split] += self.dataset.DATA_INFOS['memory_bank_category']
         else:
-            print('First Time Run No Memory Bank Yet')
+            print('First Time Run, No Memory Bank Yet')

@@ -26,61 +26,106 @@ def create_embedding(url, sd_path, category_name, nvpt: int = 8, overwrite_old: 
     return path
 
 
-def embedding_training(url, category_name, learn_rate=5e-4, batch_size=2, gradient_step=1,
-                       data_root="/home/yangjn/data/stable_diffusion_dataset/~Temp_selected_images/processed",
-                       log_directory="/home/yangjn/temp_out",
+def embedding_training(server, sd_path, url, category_name, learn_rate=5e-4, batch_size=2, gradient_step=1,
+                       data_root=None,
+                       log_directory=None,
                        training_width=768, training_height=768,
                        steps=1000, initial_step=0, shuffle_tags=False, tag_drop_out=False,
                        latent_sampling_method="once",
                        save_embedding_every=5,
-                       template_filename="style_filewords.txt",
+                       template_filename=None,
                        preview_prompt="a_photo_of_axolotl, axolotl, real_life",
                        preview_negative_prompt="lowres, text, error, cropped, worst quality, low quality, "
                                                "normal quality, jpeg artifacts, signature, watermark, username, blurry",
                        preview_steps=50, preview_sampler_index=0, preview_cfg_scale=7,
                        preview_seed=-1, preview_width=768, preview_height=768):
+    payload = {}
+    if server == "gpu25":
+        payload = {
+            "id_task": 0,
+            "embedding_name": category_name,
+            "learn_rate": str(learn_rate),
+            "batch_size": batch_size,
+            "gradient_step": gradient_step,
+            "data_root": data_root,
+            "log_directory": log_directory,
+            "training_width": training_width,
+            "training_height": training_height,
+            "varsize": False,
+            "steps": steps,
+            "clip_grad_mode": "value",
+            "shuffle_tags": shuffle_tags,
+            "clip_grad_value": str(learn_rate),
+            "tag_drop_out": tag_drop_out,
+            "latent_sampling_method": latent_sampling_method,
+            "use_weight": False,
+            "create_image_every": save_embedding_every,
+            "save_embedding_every": save_embedding_every,
+            "template_filename": template_filename,
+            "save_image_with_stored_embedding": False,
+            "preview_from_txt2img": True,
+            "preview_prompt": preview_prompt,
+            "preview_negative_prompt": preview_negative_prompt,
+            "preview_steps": preview_steps,
+            "preview_sampler_index": preview_sampler_index,
+            "preview_cfg_scale": preview_cfg_scale,
+            "preview_seed": preview_seed,
+            "preview_width": preview_width,
+            "preview_height": preview_height
+        }
 
-    payload = {
-        "id_task": 0,
-        "embedding_name": category_name,
-        "learn_rate": str(learn_rate),
-        "batch_size": batch_size,
-        "gradient_step": gradient_step,
-        "data_root": data_root,
-        "log_directory": log_directory,
-        "training_width": training_width,
-        "training_height": training_height,
-        "varsize": False,
-        "steps": steps,
-        "clip_grad_mode": "value",
-        "shuffle_tags": shuffle_tags,
-        "clip_grad_value": str(learn_rate),
-        "tag_drop_out": tag_drop_out,
-        "latent_sampling_method": latent_sampling_method,
-        "use_weight": False,
-        "create_image_every": save_embedding_every,
-        "save_embedding_every": save_embedding_every,
-        "template_filename": template_filename,
-        "save_image_with_stored_embedding": False,
-        "preview_from_txt2img": True,
-        "preview_prompt": preview_prompt,
-        "preview_negative_prompt": preview_negative_prompt,
-        "preview_steps": preview_steps,
-        "preview_sampler_index": preview_sampler_index,
-        "preview_cfg_scale": preview_cfg_scale,
-        "preview_seed": preview_seed,
-        "preview_width": preview_width,
-        "preview_height": preview_height
-    }
+        requests.post(url=f'{url}/sdapi/v1/train/embedding', json=payload)
 
-    requests.post(url=f'{url}/sdapi/v1/train/embedding', json=payload)
+        embedding_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'embeddings',
+                                        f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.pt")
+                            for i in range((steps - initial_step) // save_embedding_every)]
 
-    embedding_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'embeddings',
-                                    f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.pt")
-                           for i in range((steps - initial_step) // save_embedding_every)]
+        image_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'images',
+                                    f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.png")
+                        for i in range((steps - initial_step) // save_embedding_every)]
+    elif server == "gpu_school":
+        template_file = os.path.join(sd_path, "textual_inversion_templates", template_filename)
+        payload = {
+            "embedding_name": category_name,
+            "learn_rate": str(learn_rate),
+            "batch_size": batch_size,
+            "gradient_step": gradient_step,
+            "data_root": data_root,
+            "log_directory": log_directory,
+            "training_width": training_width,
+            "training_height": training_height,
+            "steps": steps,
+            "shuffle_tags": shuffle_tags,
+            "tag_drop_out": tag_drop_out,
+            "latent_sampling_method": latent_sampling_method,
+            "create_image_every": save_embedding_every,
+            "save_embedding_every": save_embedding_every,
+            "template_file": template_file,
+            "save_image_with_stored_embedding": False,
+            "preview_from_txt2img": True,
+            "preview_prompt": preview_prompt,
+            "preview_negative_prompt": preview_negative_prompt,
+            "preview_steps": preview_steps,
+            "preview_sampler_index": preview_sampler_index,
+            "preview_cfg_scale": preview_cfg_scale,
+            "preview_seed": preview_seed,
+            "preview_width": preview_width,
+            "preview_height": preview_height
+        }
 
-    image_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'images',
-                                f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.png")
-                       for i in range((steps - initial_step) // save_embedding_every)]
+        info = requests.post(url=f'{url}/sdapi/v1/train/embedding', json=payload)
 
+        print("embedding info")
+        print(info)
+
+        embedding_path_list = [osp.join(log_directory, category_name, 'embeddings',
+                                        f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.pt")
+                            for i in range((steps - initial_step) // save_embedding_every)]
+
+        image_path_list = [osp.join(log_directory, category_name, 'images',
+                                    f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.png")
+                        for i in range((steps - initial_step) // save_embedding_every)]
+    
+    else :
+        raise NotImplementedError
     return embedding_path_list, image_path_list

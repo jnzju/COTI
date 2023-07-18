@@ -68,7 +68,7 @@ def run(config: dict = None):
 
     for class_idx, class_name in selected_classes_info:
         sub_workdir = os.path.join(config.work_dir, class_name)
-        sub_dataset = TwoClassImageFolderSubset(dataset, class_idx, dataset.SUB_CATEGORY[class_idx])
+        sub_dataset = TwoClassImageFolderSubset(config.server, dataset, class_idx, dataset.SUB_CATEGORY[class_idx])
         # create initial embedding/hypernetwork
         # create_embedding(config.stable_diffusion_url, class_name, overwrite_old=True)
         # create_hypernetwork(config.stable_diffusion_url, class_name, overwrite_old=True)

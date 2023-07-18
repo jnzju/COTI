@@ -6,8 +6,8 @@ import torch
 
 @STRATEGIES.register_module()
 class ScoreBasedSampling(Strategy):
-	def __init__(self, dataset, args, logger, timestamp, work_dir, sd_path, n_drop=1):
-		super(ScoreBasedSampling, self).__init__(dataset, args, logger, timestamp, work_dir, sd_path)
+	def __init__(self, dataset, args, logger, timestamp, work_dir,  n_drop=1):
+		super(ScoreBasedSampling, self).__init__(dataset, args, logger, timestamp, work_dir)
 		self.n_drop = n_drop
 		# Don't forget to set dropout rate when n_drop>1!
 

@@ -5,6 +5,8 @@ import numpy as np
 from torchvision.transforms import functional as F
 import warnings
 from architectures.clip import ClipClassifier, ClipAestheticPredictor, scoring_pt_state
+import clip
+from PIL import Image
 
 
 def get_lr(optimizer):
