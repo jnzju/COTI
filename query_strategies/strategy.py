@@ -28,21 +28,14 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 @STRATEGIES.register_module()
 class Strategy:
-    def __init__(self, dataset: BaseDataset, args, logger, timestamp, work_dir, sd_path):
+    def __init__(self, dataset: BaseDataset, args, logger, timestamp, work_dir):
         self.dataset = dataset
         self.args = args
         self.work_dir = work_dir
-        self.sd_path = sd_path
+        
         # Model
-        self.cls_net, self.cls_optimizer, self.cls_scheduler = \
-            get_initialized_cls_module(self.args.cls_lr, self.args.cls_momentum,
-                                       self.args.cls_weight_decay,
-                                       self.args.cls_optim_type,
-                                       self.args.cls_n_epoch * math.ceil(len(self.dataset.DATA_INFOS['train']) / self.args.cls_batch_size),
-                                       num_classes=len(dataset.CLASSES))
-        self.scoring_net, self.scoring_optimizer = \
-            get_initialized_score_module(self.args.scoring_lr, self.args.scoring_momentum,
-                                         self.args.scoring_weight_decay)
+        self.init_models()
+        
         # This is for resume
         self.cycle = 0
         self.cls_epoch = 0
@@ -247,7 +240,7 @@ class Strategy:
 
     def _embedding_train(self, cycle, temp_processed_path):
         embedding_iters = 0
-        create_embedding(self.args.stable_diffusion_url, self.sd_path, self.dataset.CLASSES[0], overwrite_old=True)
+        create_embedding(self.args.stable_diffusion_url, self.args.stable_diffusion_model_path, self.dataset.CLASSES[0], overwrite_old=True)
         os.makedirs(os.path.join(os.path.abspath('.'),
                                  self.work_dir, f'active_round_{cycle}', "embedding"), mode=0o777, exist_ok=True)
         
@@ -284,7 +277,7 @@ class Strategy:
                 # 选择完毕，移动最佳embedding替换，删除多余的embedding
                 embedding_pt_dict = torch.load(embedding_path_list[best_idx])
                 embedding_pt_dict['name'] = self.dataset.CLASSES[0]
-                dsc_file = os.path.join(self.sd_path, "embeddings", f"{self.dataset.CLASSES[0]}.pt")
+                dsc_file = os.path.join(self.args.stable_diffusion_model_path, "embeddings", f"{self.dataset.CLASSES[0]}.pt")
                 os.remove(dsc_file)
                 # shutil.copy(embedding_path_list[best_idx], dsc_file)
                 torch.save(embedding_pt_dict, dsc_file)
@@ -297,7 +290,7 @@ class Strategy:
 
     def _hypernetwork_train(self, cycle, temp_processed_path):
         hypernetwork_iters = 0
-        create_hypernetwork(self.args.stable_diffusion_url, self.sd_path, self.dataset.CLASSES[0], overwrite_old=True)
+        create_hypernetwork(self.args.stable_diffusion_url, self.args.stable_diffusion_model_path, self.dataset.CLASSES[0], overwrite_old=True)
         os.makedirs(os.path.join(os.path.abspath('.'),
                                  self.work_dir, f'active_round_{cycle}', "hypernetwork"), mode=0o777, exist_ok=True)
         for lr in self.args.hypernetwork_learn_rate:
@@ -328,7 +321,7 @@ class Strategy:
             # 选择完毕，移动最佳embedding替换，删除多余的embedding
             hypernetwork_pt_dict = torch.load(hypernetwork_path_list[best_idx])
             hypernetwork_pt_dict['name'] = self.dataset.CLASSES[0]
-            dsc_file = os.path.join(self.sd_path, "models", "hypernetworks", f"{self.dataset.CLASSES[0]}.pt")
+            dsc_file = os.path.join(self.args.stable_diffusion_model_path, "models", "hypernetworks", f"{self.dataset.CLASSES[0]}.pt")
             os.remove(dsc_file)
             # shutil.copy(hypernetwork_path_list[best_idx], dsc_file)
             torch.save(hypernetwork_pt_dict, dsc_file)
@@ -489,7 +482,25 @@ class Strategy:
                     result = torch.flatten(torch.cat(result).cuda())
                 else:
                     result = torch.tensor([]).cuda()
-            elif metric in ['tag_matching_score', 'r_precision']:
+            elif metric == 'tag_matching_score':
+                if self.args.tag_matching_strategy == 'binary_classification':
+                    pred = torch.zeros([len(self.dataset.DATA_INFOS[split]),
+                                        len(self.dataset.CLASSES)]).cuda()
+                    y_list = []
+
+                    with torch.no_grad():
+                        for x, y, _, idxs, _ in track_iter_progress(loader):
+                            x = torch.squeeze(x, 1).cuda()
+                            out = clf(x)
+                            pred[idxs] += F.softmax(out, dim=1)
+                            y_list.append(y)
+                    y_list = torch.cat(y_list).cuda()
+                    result = torch.flatten(pred.gather(1, y_list.reshape(-1, 1).cuda()) * 10.0)
+                elif self.args.tag_matching_strategy == 'representation_distance':
+                    pass
+                else :
+                    raise NotImplementedError
+            elif metric == 'r_precision':
                 pred = torch.zeros([len(self.dataset.DATA_INFOS[split]),
                                     len(self.dataset.CLASSES)]).cuda()
                 y_list = []

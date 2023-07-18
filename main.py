@@ -88,8 +88,7 @@ def run(config: dict = None):
                                          dataset=sub_dataset,
                                          args=config,
                                          logger=logger, timestamp=timestamp,
-                                         work_dir=sub_workdir,
-                                         sd_path=config.stable_diffusion_model_path))
+                                         work_dir=sub_workdir))
 
         # print info
         logger.info('Dataset: {}'.format(config.dataset + "_" + class_name))

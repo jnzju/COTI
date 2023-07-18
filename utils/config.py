@@ -7,6 +7,13 @@ def create_parser():
     """Get the args from the command line"""
     parser = argparse.ArgumentParser(description='Deep active learning args --PyTorch ')
 
+    ################## 更换环境之后需要更改的config 项目 #######################
+    ''' 
+    --stable-diffusion-model-path
+    --dataset-path
+    --memory-bank-path
+    '''
+    
     # 与stable diffusion相关的配置
     parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7867", type=str,
                         help='the url of stable diffusion')
@@ -14,7 +21,9 @@ def create_parser():
                         nargs='+', help='categories to train, choose from '
                                         'axolotl, crampfish, emperor_penguin_chick, frilled_lizard, garfish, '
                                         'indian_cobra, king_penguin_chick, lycorma_delicatula, sidewinder, xylotrechus')
-    parser.add_argument('--stable-diffusion-model-path', default="/storage/home/lanzhenzhongLab/yangjianan/yangjianan/stable-diffusion-webui", type=str, help='the path of the sd model in this server')
+    parser.add_argument('--stable-diffusion-model-path', default="/home/yangjn/stable-diffusion-webui", type=str, 
+                        help='example :  /storage/home/lanzhenzhongLab/yangjianan/yangjianan/stable-diffusion-webui'
+                                        '/home/yangjn/stable-diffusion-webui')
 
     # 与存储相关的必要信息
     parser.add_argument('--work-dir', default=None, type=str, help='the dir to save logs and models')
@@ -24,7 +33,9 @@ def create_parser():
     # 常规深度模型训练配置
     parser.add_argument('--dataset', type=str, default='MyImageFolder', metavar='DATASET',
                         help='The name of the used dataset(default: MyImageFolder)')
-    parser.add_argument('--dataset-path', type=str, default="/storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset", help="the path of the data to be used")
+    parser.add_argument('--dataset-path', type=str, default="/home/yangjn/zhangyanming/data/stable_diffusion_dataset", 
+                        help="example :  /storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset"
+                                        "/home/yangjn/zhangyanming/data/stable_diffusion_dataset")
     parser.add_argument('--cls-load-path', type=str, default=None, help='which pth file to preload')
     parser.add_argument('--scoring-load-path', type=str, default=None, help='which pth file to preload')
 
@@ -94,10 +105,24 @@ def create_parser():
                         nargs='+', help='learning rate to use in hypernetwork training')
     
     # memory bank相关配置
-    parser.add_argument('--memory-bank-path', type=str, default='/storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/memorybank')
+    parser.add_argument('--memory-bank-path', type=str, default='/home/yangjn/zhangyanming/data/memorybank',
+                        help=   "/storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/memorybank"
+                                "/home/yangjn/zhangyanming/data/memorybank")
     parser.add_argument('--mb-save-num',type=int, default=50, help='every time select mb_save_num images to store')
     parser.add_argument('--mb-load-num',type=int, default=50, help='every time select mb_load_num images to load')
 
+    # tag matching score相关配置
+    parser.add_argument('--tag-matching-strategy', default='representation_distance', type=str, 
+                        help='please choose between these strategies:'  
+                        'binary_classification'                         #这个就是南哥实现的
+                        'representation_distance'                       #这个是使用clip预训练模型进行图文匹配
+                        '...//not implemented'
+                        )
+    # aesthetic score相关配置
+    parser.add_argument('--aesthetic-strategy', default='being used now',type=str, 
+                        help='please choose between these strategies:'
+                        '...//not implemented'
+                        )
     return parser
 
 
