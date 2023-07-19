@@ -36,20 +36,13 @@ def set_seed(seed=0):
 def run(config: dict = None):
     uid = str(uuid.uuid1().hex)[:8]
     if config.work_dir is None:
-        config.work_dir = os.path.join('tasks',
-                                       '{}_{}_{}_{}'.format(
-                                           config.dataset, config.strategy,
-                                           datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"), uid))
+        config.work_dir = os.path.join('tasks', '{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"), uid))
     os.makedirs(config.work_dir, mode=0o777, exist_ok=True)
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     config.timestamp = timestamp
-    log_file = os.path.join(config.work_dir, f'{timestamp}.log')
+    log_file = os.path.join(config.work_dir, 'log')
     logger = get_logger(name='AL_for_stable_diffusion', log_file=log_file)
-    env_info_dict = collect_env()
-    env_info = '\n'.join([f'{k}: {v}' for k, v in env_info_dict.items()])
-    dash_line = '-' * 60 + '\n'
-    logger.info('Environment info:\n' + dash_line + env_info + '\n' +
-                dash_line)
+    
     # set seed
     if config.seed is not None:
         set_seed(config.seed)  # To make the process deterministic
@@ -69,14 +62,7 @@ def run(config: dict = None):
     for class_idx, class_name in selected_classes_info:
         sub_workdir = os.path.join(config.work_dir, class_name)
         sub_dataset = TwoClassImageFolderSubset(config.server, dataset, class_idx, dataset.SUB_CATEGORY[class_idx])
-        # create initial embedding/hypernetwork
-        # create_embedding(config.stable_diffusion_url, class_name, overwrite_old=True)
-        # create_hypernetwork(config.stable_diffusion_url, class_name, overwrite_old=True)
-        # First Round Training
-        # temp_processed_path = sub_dataset.move_selected_images(config.stable_diffusion_url)
-        pass
-        # preprocess images
-        # start experiment
+        
         n_pool = len(sub_dataset.DATA_INFOS['train_full_main_category'])
         n_init = len(sub_dataset.DATA_INFOS['train_init_main_category'])
         logger.info('current category: {}'.format(class_name))

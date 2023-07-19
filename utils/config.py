@@ -16,10 +16,25 @@ def create_parser():
     '''
     
     # server
-    parser.add_argument('--server', default='gpu_school', type=str, 
+    parser.add_argument('--server', default='gpu25', type=str,
                         help=
                         'gpu25'
                         'gpu_school')
+    parser.add_argument('--task-path', default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/tasks', type=str)
+    parser.add_argument('--category', default='axolotl', type=str, help=
+                        'axolotl'
+                        'crampfish'
+                        'emperor_penguin_chick'
+                        'indian_cobra'
+                        'lycorma_delicatula'
+                        )
+    parser.add_argument('--subcategory', default='frilled_lizard', type=str, help=
+                        'frilled_lizard'
+                        'garfish'
+                        'king_penguin_chick'
+                        'sidewinder'
+                        'xylotrechus'
+                        )
     
     # 与stable diffusion相关的配置
     parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7867", type=str,
@@ -28,8 +43,8 @@ def create_parser():
                         nargs='+', help='categories to train, choose from '
                                         'axolotl, crampfish, emperor_penguin_chick, frilled_lizard, garfish, '
                                         'indian_cobra, king_penguin_chick, lycorma_delicatula, sidewinder, xylotrechus')
-    parser.add_argument('--stable-diffusion-model-path', default="/home/yangjn/stable-diffusion-webui", type=str, 
-                        help='example :  /storage/home/lanzhenzhongLab/yangjianan/yangjianan/stable-diffusion-webui'
+    parser.add_argument('--stable-diffusion-model-path', default="/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/stable-diffusion-webui", type=str, 
+                        help='example :  /storage/home/lanzhenzhongLab2/yangjianan/yangjianan/stable-diffusion-webui'
                                         '/home/yangjn/stable-diffusion-webui')
 
     # 与存储相关的必要信息
@@ -40,8 +55,8 @@ def create_parser():
     # 常规深度模型训练配置
     parser.add_argument('--dataset', type=str, default='MyImageFolder', metavar='DATASET',
                         help='The name of the used dataset(default: MyImageFolder)')
-    parser.add_argument('--dataset-path', type=str, default="/home/yangjn/zhangyanming/data/stable_diffusion_dataset", 
-                        help="example :  /storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset"
+    parser.add_argument('--dataset-path', type=str, default="/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset", 
+                        help="example :  /storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset"
                                         "/home/yangjn/zhangyanming/data/stable_diffusion_dataset")
     parser.add_argument('--cls-load-path', type=str, default=None, help='which pth file to preload')
     parser.add_argument('--scoring-load-path', type=str, default=None, help='which pth file to preload')
@@ -112,8 +127,8 @@ def create_parser():
                         nargs='+', help='learning rate to use in hypernetwork training')
     
     # memory bank相关配置
-    parser.add_argument('--memory-bank-path', type=str, default='/home/yangjn/zhangyanming/data/memorybank',
-                        help=   "/storage/home/lanzhenzhongLab/yangjianan/yangjianan/zhangyanming/data/memorybank"
+    parser.add_argument('--memory-bank-path', type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/memorybank',
+                        help=   "/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/memorybank"
                                 "/home/yangjn/zhangyanming/data/memorybank")
     parser.add_argument('--mb-save-num',type=int, default=50, help='every time select mb_save_num images to store')
     parser.add_argument('--mb-load-num',type=int, default=50, help='every time select mb_load_num images to load')

@@ -21,8 +21,9 @@ import math
 import csv
 from evaluation import inception_score, IgnoreLabelDataset
 from pytorch_fid.fid_score import calculate_fid_given_paths
-from PIL import ImageFile
+from PIL import ImageFile, Image
 import shutil
+import clip
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
@@ -290,50 +291,6 @@ class Strategy:
                 """
             del self.dataset.DATA_INFOS['temp']
 
-    def _hypernetwork_train(self, cycle, temp_processed_path):
-        hypernetwork_iters = 0
-        create_hypernetwork(self.args.stable_diffusion_url, self.args.stable_diffusion_model_path, self.dataset.CLASSES[0], overwrite_old=True)
-        os.makedirs(os.path.join(os.path.abspath('.'),
-                                 self.work_dir, f'active_round_{cycle}', "hypernetwork"), mode=0o777, exist_ok=True)
-        for lr in self.args.hypernetwork_learn_rate:
-            hypernetwork_path_list, image_path_list = \
-                hypernetwork_training(self.args.stable_diffusion_url,
-                                      self.dataset.CLASSES[0],
-                                      learn_rate=lr,
-                                      data_root=temp_processed_path,
-                                      log_directory=os.path.join(os.path.abspath('.'),
-                                                                 self.work_dir, f'active_round_{cycle}', "hypernetwork"),
-                                      steps=hypernetwork_iters + self.args.hypernetwork_steps_per_lr,
-                                      initial_step=hypernetwork_iters,
-                                      save_hypernetwork_every=self.args.save_hypernetwork_every,
-                                      template_file=os.path.join(os.path.abspath(".."),
-                                                                 "stable-diffusion-webui",
-                                                                 "textual_inversion_templates", "hypernetwork.txt"),
-                                      preview_prompt=f"a_photo_of_{self.dataset.CLASSES[0]}, "
-                                                     f"{self.dataset.CLASSES[0]}, real_life")
-
-            # 接下来筛选最优hypernetwork
-            self.dataset.DATA_INFOS['temp'] = [{'no': i, 'img': path, 'gt_label': 0, 'aesthetic_score': 0.
-                                                } for i, path in enumerate(image_path_list)]
-            aesthetic_score_list = self.predict(self.scoring_net, split='temp', metric='aesthetic_score')
-            tag_matching_score_list = self.predict(self.cls_net, split='temp', metric='tag_matching_score')
-            total_score_list = aesthetic_score_list + tag_matching_score_list
-            best_idx = torch.argmax(total_score_list).item()
-            hypernetwork_iters = hypernetwork_iters + self.args.hypernetwork_steps_per_lr
-            # 选择完毕，移动最佳embedding替换，删除多余的embedding
-            hypernetwork_pt_dict = torch.load(hypernetwork_path_list[best_idx])
-            hypernetwork_pt_dict['name'] = self.dataset.CLASSES[0]
-            dsc_file = os.path.join(self.args.stable_diffusion_model_path, "models", "hypernetworks", f"{self.dataset.CLASSES[0]}.pt")
-            os.remove(dsc_file)
-            # shutil.copy(hypernetwork_path_list[best_idx], dsc_file)
-            torch.save(hypernetwork_pt_dict, dsc_file)
-            """
-            for del_idx in range(best_idx + 1, self.args.hypernetwork_steps_per_lr // self.args.save_hypernetwork_every):
-                os.remove(image_path_list[del_idx])
-                os.remove(hypernetwork_path_list[del_idx])
-            """
-            del self.dataset.DATA_INFOS['temp']
-
     def embedding_train_cycle(self, cycle):
         temp_path = os.path.join(os.path.abspath('.'), self.work_dir, f'active_round_{cycle}', 'selected_images')
         temp_processed_path = self.dataset.move_selected_images(self.args.stable_diffusion_url, temp_path)
@@ -401,174 +358,76 @@ class Strategy:
             split='train'
         )
 
-    def predict(self, clf, split='train', metric='accuracy',
+    def predict(self, clf, split=None, metric=None,
                 topk=None, n_drop=None, thrs=None, dropout_split=False, log_show=True):
-        # For both evaluation and informative metric based on probabilistic outputs
-        # Allowed split: train, train_full, val, test
-        # Allowed metrics: accuracy, precision, recall, f1_score, support
-        # The above metrics return a scalar
-        # Allowed informative metrics: entropy, lc, margin
-        # The above metrics return a vector of length N(The number of data points)
-        # If in dropout split mode, The above metrics return a tensor of size [n_drop, N, C]
         if isinstance(clf, torch.nn.Module):
             clf.eval()
-        if n_drop is None:
-            n_drop = 1
-        if topk is None:
-            topk = 1
-        if thrs is None:
-            thrs = 0.
+
         # Predicting classification model quality
-        if metric in ['accuracy', 'precision', 'recall', 'f1_score', 'support']:
-            loader = GetDataLoader(self.dataset, split=split,
-                                   shuffle=False,
-                                   batch_size=self.args.validation_batch_size, task='cls')
-            # Evaluation Metric
-            self.logger.info(f"Calculating Performance with {metric} on {split}...")
-            pred = torch.zeros([len(self.dataset.DATA_INFOS[split]),
-                                len(self.dataset.CLASSES)]).cuda()
-            target = torch.zeros(len(self.dataset.DATA_INFOS[split]), dtype=torch.long).cuda()
+        loader = GetDataLoader(self.dataset, split=split,
+                                shuffle=False,
+                                batch_size=self.args.validation_batch_size, task='scoring')
+        self.logger.info(f"Calculating Informativeness with {metric} on {split}...")
+        # 求图像得分的平均值
+        # calculating scores
+        if metric == 'aesthetic_score':
+            result = []
             with torch.no_grad():
-                for x, y, _, idxs, _ in track_iter_progress(loader):
-                    x, y = x.cuda(), y.cuda()
-                    if isinstance(clf, torch.nn.Module):
-                        out, _, _ = clf(x)
-                    else:
-                        out = clf(x)
-                    prob = F.softmax(out, dim=1)
-                    pred[idxs] = prob
-                    target[idxs] = y
-            if metric == 'accuracy':
-                result = accuracy(pred, target, topk, thrs)
-            elif metric == 'precision':
-                result = precision(pred, target, thrs=thrs)
-            elif metric == 'recall':
-                result = recall(pred, target, thrs=thrs)
-            elif metric == 'f1_score':
-                result = f1_score(pred, target, thrs=thrs)
-            elif metric == 'support':
-                result = support(pred, target)
+                for x, _, _, _, _ in track_iter_progress(loader):
+                    x = x.cuda()
+                    x_scores = clf(x)
+                    result.append(x_scores)
+                """
+                for data_dict in track_iter_progress(self.dataset.DATA_INFOS[split]):
+                    pil_image = Image.open(data_dict['img'])
+                    image_feature = get_clip_image_features(pil_image).to(torch.float)
+                    prediction = clf(image_feature)
+                    result.append(float(prediction))
+                """
+            if len(result) > 0:
+                result = torch.flatten(torch.cat(result).cuda())
             else:
-                raise Exception(f"Metric {metric} not implemented!")
-            if len(result) == 1:
-                result = result.item()
-            else:
-                result = result.numpy().tolist()
-            if log_show:
-                log_dict = dict(mode=split, cycle=self.cycle)
-                log_dict[metric] = result
-                self.TextLogger.log(log_dict)
-
-        elif metric in ['aesthetic_score', 'tag_matching_score', 'is', 'fid']:
-            loader = GetDataLoader(self.dataset, split=split,
-                                   shuffle=False,
-                                   batch_size=self.args.validation_batch_size, task='scoring')
-            self.logger.info(f"Calculating Informativeness with {metric} on {split}...")
-            # 求图像得分的平均值
-            # calculating scores
-            if metric == 'aesthetic_score':
-                result = []
-                with torch.no_grad():
-                    for x, _, _, _, _ in track_iter_progress(loader):
-                        x = x.cuda()
-                        x_scores = clf(x)
-                        result.append(x_scores)
-                    """
-                    for data_dict in track_iter_progress(self.dataset.DATA_INFOS[split]):
-                        pil_image = Image.open(data_dict['img'])
-                        image_feature = get_clip_image_features(pil_image).to(torch.float)
-                        prediction = clf(image_feature)
-                        result.append(float(prediction))
-                    """
-                if len(result) > 0:
-                    result = torch.flatten(torch.cat(result).cuda())
-                else:
-                    result = torch.tensor([]).cuda()
-            elif metric == 'tag_matching_score':
-                if self.args.tag_matching_strategy == 'binary_classification':
-                    pred = torch.zeros([len(self.dataset.DATA_INFOS[split]),
-                                        len(self.dataset.CLASSES)]).cuda()
-                    y_list = []
-
-                    with torch.no_grad():
-                        for x, _, _, idxs, _ in track_iter_progress(loader):
-                            x = torch.squeeze(x, 1).cuda()
-                            out = clf(x)
-                            pred[idxs] += F.softmax(out, dim=1)
-                    result = torch.flatten(pred[:, 0] * 10.0)
-                elif self.args.tag_matching_strategy == 'representation_distance':
-                    pred = torch.zeros([len(self.dataset.DATA_INFOS[split]), len(self.dataset.CLASSES)]).cuda()
-                    with torch.no_grad():
-                        for _, _, _, idxs, _ in track_iter_progress(loader):
-                            num = len(idxs)
-                            image_paths = [self.dataset.DATA_INFOS[split][idxs[i]]['img'] for i in range(num)]
-                            positive_text_input = "a " + self.dataset.CLASSES[0]
-                            sub_text_input = "a " + self.dataset.father_dataset.CLASSES[self.dataset.sub_class_idx]
-                            device = "cuda"
-                            model, preprocess = clip.load("ViT-B/32", device=device)
-                            
-                            for i in range(num):
-                                image = preprocess(Image.open(images_paths[i])).unsqueeze(0).to(device)
-                                text = clip.tokenize([positive_text_input, sub_text_input]).to(device)
-                                logits_per_image, logits_per_text = model(image, text)
-                                pred[idxs[i]] = logits_per_image.softmax(dim=-1)
-                    result = torch.flatten(pred[:, 0] * 10.0)
-                else :
-                    raise NotImplementedError
-            elif metric == 'r_precision':
-                raise NotImplementedError
-            elif metric == 'is':
-                raise NotImplementedError
-            elif metric == 'fid':
-                raise NotImplementedError
-            else:
-                raise NotImplementedError
-
-        else:  # Informative Metric
-            loader = GetDataLoader(self.dataset, split=split,
-                                   shuffle=False,
-                                   batch_size=self.args.validation_batch_size, task='cls')
-            self.logger.info(f"Calculating Informativeness with {metric} on {split}...")
-            if isinstance(clf, torch.nn.Module):
-                clf.train()
-            if dropout_split is False:
+                result = torch.tensor([]).cuda()
+        elif metric == 'tag_matching_score':
+            if self.args.tag_matching_strategy == 'binary_classification':
                 pred = torch.zeros([len(self.dataset.DATA_INFOS[split]),
                                     len(self.dataset.CLASSES)]).cuda()
-                for i in range(n_drop):
-                    self.logger.info('n_drop {}/{}'.format(i + 1, n_drop))
-                    with torch.no_grad():
-                        for x, _, _, idxs, _ in track_iter_progress(loader):
-                            x = torch.squeeze(x, 1).cuda()
-                            out = clf(x)
-                            pred[idxs] += F.softmax(out, dim=1)
-                    # print(pred)
-                pred /= n_drop
-                if metric == 'entropy':
-                    log_pred = torch.log(pred)
-                    # the larger the more uncertain
-                    result = - (pred * log_pred).sum(1)
-                elif metric == 'lc':
-                    # the smaller the more uncertain
-                    result = pred.max(1)[0]
-                elif metric == 'margin':
-                    # the smaller the more uncertain
-                    pred_sorted, _ = pred.sort(descending=True)
-                    result = pred_sorted[:, 0] - pred_sorted[:, 1]
-                elif metric == 'prob':
-                    result = pred
-                else:
-                    raise Exception(f"Metric {metric} not implemented!")
-            else:
-                print("No metric will be used in dropout split mode!")
-                result = torch.zeros([n_drop, len(self.dataset.DATA_INFOS[split]),
-                                      len(self.dataset.CLASSES)]).cuda()
-                for i in range(n_drop):
-                    self.logger.info('n_drop {}/{}'.format(i + 1, n_drop))
-                    with torch.no_grad():
-                        for x, _, _, idxs, _ in track_iter_progress(loader):
-                            x = get_clip_image_features(x).cuda()
-                            out = clf(x)
-                            result[i][idxs] += F.softmax(out, dim=1)
+                
+                with torch.no_grad():
+                    for x, _, _, idxs, _ in track_iter_progress(loader):
+                        x = torch.squeeze(x, 1).cuda()
+                        out = clf(x)
+                        pred[idxs] += F.softmax(out, dim=1)
+                result = torch.flatten(pred[:, 0] * 10.0)
+            elif self.args.tag_matching_strategy == 'representation_distance':
+                pred = torch.zeros([len(self.dataset.DATA_INFOS[split]), len(self.dataset.CLASSES)]).cuda()
+                with torch.no_grad():
+                    for _, _, _, idxs, _ in track_iter_progress(loader):
+                        num = len(idxs)
+                        image_paths = [self.dataset.DATA_INFOS[split][idxs[i]]['img'] for i in range(num)]
+                        positive_text_input = "a " + self.dataset.CLASSES[0]
+                        sub_text_input = "a " + self.dataset.father_dataset.CLASSES[self.dataset.sub_class_idx]
+                        device = "cuda"
+                        model, preprocess = clip.load("ViT-B/32", device=device)
+                        
+                        for i in range(num):
+                            image = preprocess(Image.open(image_paths[i])).unsqueeze(0).to(device)
+                            text = clip.tokenize([positive_text_input, sub_text_input]).to(device)
+                            logits_per_image, logits_per_text = model(image, text)
+                            pred[idxs[i]] = logits_per_image.softmax(dim=-1)
+                result = torch.flatten(pred[:, 0] * 10.0)
+            else :
+                raise NotImplementedError
+        elif metric == 'r_precision':
+            raise NotImplementedError
+        elif metric == 'is':
+            raise NotImplementedError
+        elif metric == 'fid':
+            raise NotImplementedError
+        elif metric == 'clip':
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
         # n_drops ignored
         return result
         # back to train split as the default split
