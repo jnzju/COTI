@@ -635,22 +635,22 @@ class Strategy:
             # prepare data
             # 切换到下一个任务
             self.dataset.task_idx += 1
-            self.dataset.DATA_INFOS['train_now'] = copy.deepcopy(self.dataset.DATA_INFOS['tasks'][self.dataset.task_idx])
-            split_length = len(self.dataset.DATA_INFOS['train_now'])
+            self.dataset.DATA_INFOS['task_now'] = copy.deepcopy(self.dataset.DATA_INFOS['tasks'][self.dataset.task_idx])
+            split_length = len(self.dataset.DATA_INFOS['task_now'])
             idxs = np.arange(split_length)
-            aesthetic_scores=self.predict(self.scoring_net, split='train_now', metric='aesthetic_score')
-            tag_matching_scores=self.predict(self.cls_net, split='train_now', metric='tag_matching_score')
+            aesthetic_scores=self.predict(self.scoring_net, split='task_now', metric='aesthetic_score')
+            tag_matching_scores=self.predict(self.cls_net, split='task_now', metric='tag_matching_score')
             total_scores = (aesthetic_scores + tag_matching_scores).sort()[1].cpu().numpy() #[1]表示的是使用返回值的索引
             idxs_touse = idxs[total_scores]
-            num_touse = len(self.dataset.DATA_INFOS['train_now']) // 2
+            num_touse = len(self.dataset.DATA_INFOS['task_now']) // 2
             lst = []
             cnt = 0
             for i in idxs_touse:
                 if cnt > num_touse:
                     break
-                lst.append(self.dataset.DATA_INFOS['train_now'][i])
+                lst.append(self.dataset.DATA_INFOS['task_now'][i])
                 cnt += 1
-            self.dataset.DATA_INFOS['train_now'] = lst
+            self.dataset.DATA_INFOS['task_now'] = lst
             
             
             # 将mb中的优质数据load出来训练
