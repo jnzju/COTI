@@ -625,7 +625,7 @@ class Strategy:
         while self.task_idx < self.args.task_num:
             if self.args.sd_train_method == 'embed':
                 process = subprocess.Popen('CUDA_VISIBLE_DEVICES=1 ./webui.sh --port 7860', shell=True, cwd=self.args.stable_diffusion_model_path)
-                time.sleep(20) # model loading
+                time.sleep(30) # model loading
             else:
                 raise NotImplementedError
             
@@ -669,7 +669,7 @@ class Strategy:
             if self.args.sd_train_method == 'embed':
                 self.embedding_train()              # 根据训练集训练embedding
                 process.send_signal(signal.SIGINT)
-                time.sleep(20)
+                time.sleep(30)
             else:
                 raise NotImplementedError
             
@@ -679,7 +679,7 @@ class Strategy:
             
             if self.args.sd_train_method == 'embed':
                 process = subprocess.Popen('CUDA_VISIBLE_DEVICES=1 ./webui.sh --port 7860', shell=True, cwd=self.args.stable_diffusion_model_path)
-                time.sleep(20) # model loading
+                time.sleep(30) # model loading
             else:
                 raise NotImplementedError
             
@@ -693,7 +693,7 @@ class Strategy:
             
             if self.args.sd_train_method == 'embed':
                 process.send_signal(signal.SIGINT)
-                time.sleep(20)
+                time.sleep(30)
             else:
                 raise NotImplementedError
 
