@@ -9,13 +9,10 @@ from torch.utils.data import Dataset, DataLoader
 from piq import FID,IS
 import piq
 from sklearn.metrics.pairwise import cosine_similarity
+from piq import inception_score
 
 from PIL import Image
-data_dir = '/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/COTI/tasks/MyImageFolder_ScoreBasedSampling_2023-07-16-15-42_5de1a3bc'
-data_src = '/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset/training_dataset_initial/'
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model, preprocess = clip.load("ViT-B/32", device=device)
 imagenet_class = {0: 'tench, Tinca tinca',
  1: 'goldfish, Carassius auratus',
  2: 'great white shark, white shark, man-eater, man-eating shark, Carcharodon carcharias',
@@ -1031,56 +1028,136 @@ class Images(Dataset):
         ori_img = Image.open(self.files[index])
         img = self.img_transform(ori_img)
         img = (img+1)/2
-        ori_img = preprocess(ori_img)
-        return {'images': img,'ori':ori_img}
+        # ori_img = preprocess(ori_img)
+        return {'images': img}
 
     def __len__(self):
         return len(self.files)
     
 
     
+def utils(category:str, subcategory):
+    template_list = []
+    template_list.append(f'a photo of {category}')
+    # template_list = ["a photo of axolotl", "a photo of crampfish", "a photo of emperor penguin chick","a photo of frilled lizard","a photo of garfish","a photo of indian cobra","a photo of king penguin chick","a photo of lycorma delicatula","a photo of sidewinder","a photo of xylotrechus"]
+    for i in range(0,1000):
+        template_list.append("a photo of " + imagenet_class[i])
+    text = clip.tokenize(template_list).to(device)
+
+    test_class_list = ["emperor_penguin_chick","king_penguin_chick"]
+    label_list = [2,6]
 
 
-template_list = ["a photo of axolotl", "a photo of crampfish", "a photo of emperor penguin chick","a photo of frilled lizard","a photo of garfish","a photo of indian cobra","a photo of king penguin chick","a photo of lycorma delicatula","a photo of sidewinder","a photo of xylotrechus"]
-for i in range(0,1000):
-    template_list.append("a photo of" + imagenet_class[i])
-text = clip.tokenize(template_list).to(device)
+    for i in range(0,len(test_class_list)):
+        test_class = test_class_list[i]
+        gt_label = label_list[i]
+        temp_data_dir = data_dir + test_class + "/active_round_5/embedding/" + test_class + "/images"
+        temp_data_src = data_src + test_class
+        dataloader_gen = DataLoader(Images(temp_data_dir), batch_size=len(Images(temp_data_dir)))
+        dataloader_src = DataLoader(Images(temp_data_src), batch_size=len(Images(temp_data_src)))
+        labels = torch.ones(len(Images(temp_data_dir)))*gt_label
+        for _,(data) in enumerate(dataloader_gen):
+            image = data['ori'].to(device)
+            with torch.no_grad():
+                image_features = model.encode_image(image)
+                text_features = model.encode_text(text)
+                similarity_matrix = torch.from_numpy(cosine_similarity(image_features.cpu(), text_features.cpu()))
+                _, indices = torch.sort(similarity_matrix, descending=True)
+                top = indices[:,:1].view(-1)
+                r_precision = (top==labels).sum()/top.shape[0]
+                print("r_precision of",test_class,r_precision.item())
+        fid_metric = FID()
+        is_metric = IS()
 
-test_class_list = ["emperor_penguin_chick","king_penguin_chick"]
-label_list = [2,6]
+        is_feat_gen = is_metric.compute_feats(dataloader_gen)
+        is_feat_src = is_metric.compute_feats(dataloader_src)
+        fid_feat_gen = fid_metric.compute_feats(dataloader_gen)
+        fid_feat_src = fid_metric.compute_feats(dataloader_src)
+        print("inception score of",test_class,is_metric(is_feat_gen,is_feat_src))
+        print("FID of",test_class,fid_metric(fid_feat_gen,fid_feat_src))
 
 
-for i in range(0,len(test_class_list)):
-    test_class = test_class_list[i]
-    gt_label = label_list[i]
-    temp_data_dir = data_dir + test_class + "/active_round_5/embedding/" + test_class + "/images"
-    temp_data_src = data_src + test_class
-    dataloader_gen = DataLoader(Images(temp_data_dir), batch_size=len(Images(temp_data_dir)))
-    dataloader_src = DataLoader(Images(temp_data_src), batch_size=len(Images(temp_data_src)))
-    labels = torch.ones(len(Images(temp_data_dir)))*gt_label
-    for _,(data) in enumerate(dataloader_gen):
-        image = data['ori'].to(device)
-        with torch.no_grad():
-            image_features = model.encode_image(image)
-            text_features = model.encode_text(text)
-            similarity_matrix = torch.from_numpy(cosine_similarity(image_features.cpu(), text_features.cpu()))
-            _, indices = torch.sort(similarity_matrix, descending=True)
-            top = indices[:,:1].view(-1)
-            r_precision = (top==labels).sum()/top.shape[0]
-            print("r_precision of",test_class,r_precision.item())
-    fid_metric = FID()
-    is_metric = IS()
-
-    is_feat_gen = is_metric.compute_feats(dataloader_gen)
-    is_feat_src = is_metric.compute_feats(dataloader_src)
-    fid_feat_gen = fid_metric.compute_feats(dataloader_gen)
-    fid_feat_src = fid_metric.compute_feats(dataloader_src)
-    print("inception score of",test_class,is_metric(is_feat_gen,is_feat_src))
-    print("FID of",test_class,fid_metric(fid_feat_gen,fid_feat_src))
-
-def calculate_metric(metric:str, data_dir:str, data_src:str, ):
-    pass
-def calculate_is():
-    pass
-def calculate_fid():
+        
+if __name__ == '__main__':
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, preprocess = clip.load("ViT-B/32", device=device)
     
+    gen_data_dir = '/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/tasks/2023-07-22-15-44_a0dca728/task_0/gen_val_images'
+    text_dir = '/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/text'
+    
+    template_list = []
+    template_list.append(f'a photo of axolotl')
+    # template_list = ["a photo of axolotl", "a photo of crampfish", "a photo of emperor penguin chick","a photo of frilled lizard","a photo of garfish","a photo of indian cobra","a photo of king penguin chick","a photo of lycorma delicatula","a photo of sidewinder","a photo of xylotrechus"]
+    for i in range(0,1000):
+        template_list.append("a photo of " + imagenet_class[i])
+    text = clip.tokenize(template_list).to(device)
+    
+    text = model.encode_text(text)
+    # print(text.shape)
+    # exit(0)
+    
+    file_paths = list(pathlib.Path(gen_data_dir).glob('*.png'))
+    
+    gen_tensor = torch.stack(
+        ([preprocess(Image.open(img_path)).to('cuda') for img_path in file_paths])
+    )
+    
+    print(gen_tensor.shape)
+    
+    # image = Image.open(os.path.join(gen_data_dir, 'output_0.png'))
+    
+    # image = preprocess(image).to('cuda')
+    
+    # print(image.shape)
+    
+    # image = torch.unsqueeze(image, 0)
+    
+    
+    with torch.no_grad():
+        out = model.encode_image(gen_tensor)
+        out.float()
+        print(out.shape)
+        
+        similarity_matrix = torch.from_numpy(cosine_similarity(out.cpu(), text.cpu()))
+        
+    # out = out.cpu().float()
+    
+        labels = torch.ones(len(os.listdir(gen_data_dir))) * 0
+        labels = labels.view(-1, 1)
+        print(labels.shape)
+        print(similarity_matrix.shape)
+        
+        _, indices = torch.sort(similarity_matrix, descending=True)
+        top = indices[:,:200]
+        num = 0
+        for i in range(len(labels)):
+            if 0 in top[i]:
+                num += 1
+        
+        print(num)
+        r_precision = num / top.shape[0]
+        print("r_precision of",r_precision)
+        
+        exit(0)
+    print(type(out))
+        
+    score = inception_score(out)
+    print(score)
+    
+    exit(0)
+    
+    template_list = []
+    template_list.append(f'a photo of axolotl')
+    # template_list = ["a photo of axolotl", "a photo of crampfish", "a photo of emperor penguin chick","a photo of frilled lizard","a photo of garfish","a photo of indian cobra","a photo of king penguin chick","a photo of lycorma delicatula","a photo of sidewinder","a photo of xylotrechus"]
+    for i in range(0,1000):
+        template_list.append("a photo of " + imagenet_class[i])
+    text = clip.tokenize(template_list).to(device)
+    
+    print
+    
+    
+    init_data_dir = '/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset/training_dataset_initial/axolotl'
+    init_loader_size = len(Images(init_data_dir))
+    init_loader = DataLoader(Images(init_data_dir), batch_size=init_loader_size)
+    gen_data_dir = '/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/tasks/2023-07-22-15-44_a0dca728/task_0/gen_val_images'
+    gen_loader = DataLoader(Images(gen_data_dir), batch_size=init_loader_size)

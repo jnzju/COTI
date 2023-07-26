@@ -6,14 +6,13 @@ import random
 
 import torch
 import numpy as np
-from datasets.builder import DATASETS
-from query_strategies.builder import STRATEGIES
+from datasets.base_dataset import BaseDataset
+from query_strategies.strategy import Strategy
 from utils.config import parse_commandline_args
 from utils.logger import get_logger
 from utils.collect_env import collect_env
 from utils.timer import Timer
 
-from datasets.two_class_subset import TwoClassImageFolderSubset
 from plot.curve import plot_curve_scores
 
 
@@ -34,10 +33,32 @@ def set_seed(seed=0):
 
 
 def run(config: dict = None):
+    if config.sd_train_method == 'embed':
+        config.task_path = config.embed_task_path
+        config.mb_path = config.mb_path_embed
+    elif config.sd_train_method == 'hyper':
+        config.task_path = config.hyper_task_path
+        config.mb_path = config.mb_path_hyper
+    elif config.sd_train_method == 'testembed':
+        config.sd_train_method == 'embed'
+        config.task_path = config.test_task_path
+        config.mb_path = config.mb_path_test
+    elif config.sd_train_method == 'testhyper':
+        config.sd_train_method == 'hyper'
+        config.task_path = config.test_task_path
+        config.mb_path = config.mb_path_test
+    else :
+        raise NotImplementedError
+    
+    if not os.path.exists(config.task_path):
+        os.makedirs(config.task_path, mode=0o777, exist_ok=True)
+    
     uid = str(uuid.uuid1().hex)[:8]
-    if config.work_dir is None:
-        config.work_dir = os.path.join('tasks', '{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"), uid))
+    
+    config.work_dir = os.path.join(config.task_path, '{}_{}'.format(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"), uid))
+    
     os.makedirs(config.work_dir, mode=0o777, exist_ok=True)
+    
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
     config.timestamp = timestamp
     log_file = os.path.join(config.work_dir, 'log')
@@ -46,56 +67,27 @@ def run(config: dict = None):
     # set seed
     if config.seed is not None:
         set_seed(config.seed)  # To make the process deterministic
-
+    
     # load dataset
-    dataset = DATASETS.build(
-        dict(type=config.dataset, data_path=config.dataset_path, subset=config.subset,
-             initial_generated_images_per_class=config.initial_generated_images_per_class,
-             url=config.stable_diffusion_url))
+    dataset = BaseDataset(config)
+    
+    n_pool = len(dataset.DATA_INFOS['train_full'])
+    n_init = len(dataset.DATA_INFOS['train_init'])
+    logger.info('current category: {}'.format(config.category))
+    logger.info('cardinality of initial labeled pool: {}'.format(n_init))
+    logger.info('cardinality of initial candidate pool: {}'.format(n_pool))
 
-    if config.categories is None:
-        selected_classes_info = [(idx, name) for idx, name in enumerate(dataset.CLASSES)]
-    else:
-        class_to_idx = {name: i for i, name in enumerate(dataset.CLASSES)}
-        selected_classes_info = [(class_to_idx[name], name) for name in config.categories]
+    # load network
+    strategy = Strategy(dataset=dataset, args=config, logger=logger)
 
-    for class_idx, class_name in selected_classes_info:
-        sub_workdir = os.path.join(config.work_dir, class_name)
-        sub_dataset = TwoClassImageFolderSubset(config.server, dataset, class_idx, dataset.SUB_CATEGORY[class_idx])
-        
-        n_pool = len(sub_dataset.DATA_INFOS['train_full_main_category'])
-        n_init = len(sub_dataset.DATA_INFOS['train_init_main_category'])
-        logger.info('current category: {}'.format(class_name))
-        logger.info('cardinality of initial labeled pool: {}'.format(n_init))
-        logger.info('cardinality of initial candidate pool: {}'.format(n_pool))
+    strategy.run()
 
-        # load network
-        strategy = STRATEGIES.build(dict(type=config.strategy,
-                                         dataset=sub_dataset,
-                                         args=config,
-                                         logger=logger, timestamp=timestamp,
-                                         work_dir=sub_workdir))
-
-        # print info
-        logger.info('Dataset: {}'.format(config.dataset + "_" + class_name))
-        logger.info('Seed {}'.format(config.seed))
-        logger.info('Strategy: {}'.format(type(strategy).__name__))
-
-        if config.cls_load_path is not None:
-            strategy.clf.load_state_dict(torch.load(config.cls_load_path))
-            logger.info(f'Get pretrained classification parameters from {config.cls_load_path}')
-        if config.scoring_load_path is not None:
-            strategy.clf.load_state_dict(torch.load(config.scoring_load_path))
-            logger.info(f'Get pretrained scoring parameters from {config.scoring_load_path}')
-
-        strategy.run()
-
-        # plot acc - label_num curve
-        plot_curve_scores(sub_workdir,
-                          strategy.num_labels_list,
-                          [strategy.classifier_score_list, strategy.aesthetic_score_list,
-                           strategy.total_score_list],
-                          ['Tag Matching Score', 'Aesthetic Score', 'Comprehensive Score'])
+    # plot acc - label_num curve
+    plot_curve_scores(config.work_dir,
+                        strategy.num_labels_list,
+                        [strategy.classifier_score_list, strategy.aesthetic_score_list,
+                        strategy.total_score_list],
+                        ['Tag Matching Score', 'Aesthetic Score', 'Comprehensive Score'])
 
 
 if __name__ == '__main__':

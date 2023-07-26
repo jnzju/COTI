@@ -1,3 +1,4 @@
+import datetime
 import requests
 import os
 import os.path as osp
@@ -25,25 +26,27 @@ def create_hypernetwork(url, sd_path, category_name, enable_sizes=[768, 320, 640
     }
     response = requests.post(url=f'{url}/sdapi/v1/create/hypernetwork', json=payload)
     path = response.json()['info'][30:]
+    print(response.json()['info'])
     print(f"Hypernetwork created at: {path}")
     return path
 
 
-def hypernetwork_training(url, category_name, learn_rate=5e-4, batch_size=1, gradient_step=1,
-                          data_root="/home/yangjn/data/stable_diffusion_dataset/~Temp_selected_images/processed",
-                          log_directory="/home/yangjn/temp_out",
+def hypernetwork_training(sd_path, url, category_name, learn_rate=5e-4, batch_size=1, gradient_step=1,
+                          data_root=None,
+                          log_directory=None,
                           training_width=768, training_height=768,
                           steps=1000, initial_step=0, shuffle_tags=False, tag_drop_out=False,
                           latent_sampling_method="once",
-                          save_hypernetwork_every=50,
-                          template_file="/home/yangjn/stable-diffusion-webui/textual_inversion_templates/hypernetwork.txt",
-                          preview_prompt="a_photo_of_axolotl, axolotl, real_life",
+                          save_hypernetwork_every=5,
+                          template_filename=None,
+                          preview_prompt=None,
                           preview_negative_prompt="lowres, text, error, cropped, worst quality, low quality, "
                                                   "normal quality, jpeg artifacts, signature, watermark, username, blurry",
                           preview_steps=50, preview_sampler_index=0, preview_cfg_scale=7,
                           preview_seed=-1, preview_width=768, preview_height=768):
 
     payload = {
+        "id_task":0,
         "hypernetwork_name": category_name,
         "learn_rate": str(learn_rate),
         "batch_size": batch_size,
@@ -52,13 +55,17 @@ def hypernetwork_training(url, category_name, learn_rate=5e-4, batch_size=1, gra
         "log_directory": log_directory,
         "training_width": training_width,
         "training_height": training_height,
+        "varsize": False,
         "steps": steps,
+        "clip_grad_mode": "value",
+        "clip_grad_value": str(learn_rate),
         "shuffle_tags": shuffle_tags,
         "tag_drop_out": tag_drop_out,
         "latent_sampling_method": latent_sampling_method,
+        "use_weight": False,
         "create_image_every": save_hypernetwork_every,
         "save_hypernetwork_every": save_hypernetwork_every,
-        "template_file": template_file,
+        "template_filename": template_filename,
         "preview_from_txt2img": True,
         "preview_prompt": preview_prompt,
         "preview_negative_prompt": preview_negative_prompt,
@@ -70,13 +77,15 @@ def hypernetwork_training(url, category_name, learn_rate=5e-4, batch_size=1, gra
         "preview_height": preview_height
     }
 
-    requests.post(url=f'{url}/sdapi/v1/train/hypernetwork', json=payload)
+    info = requests.post(url=f'{url}/sdapi/v1/train/hypernetwork', json=payload)
+    print('hypernetwork info')
+    print(info.text)
 
-    hypernetwork_path_list = [osp.join(log_directory, category_name, 'hypernetworks',
+    hypernetwork_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'hypernetworks',
                                        f"{category_name}-{save_hypernetwork_every * (i + 1)}.pt")
                               for i in range((steps - initial_step) // save_hypernetwork_every)]
 
-    image_path_list = [osp.join(log_directory, category_name, 'images',
+    image_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'images',
                                 f"{category_name}-{save_hypernetwork_every * (i + 1)}.png")
                        for i in range((steps - initial_step) // save_hypernetwork_every)]
 

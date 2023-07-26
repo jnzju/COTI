@@ -34,4 +34,4 @@ def image_preprocess(server, url, category_name, process_src: str, process_dst: 
         raise NotImplementedError
     info = requests.post(url=f'{url}/sdapi/v1/preprocess', json=payload)
     print("preprocess info")
-    print(info)
+    print(info.text)

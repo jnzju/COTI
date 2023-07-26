@@ -38,6 +38,8 @@ sgd :
 
 
 def get_initialized_cls_module(lr=3e-4, momentum=0.9, weight_decay=1e-4, optim_type='adam', T_max=None, **kwargs):
+    print(f'T_max:{T_max}')
+    
     clf = torch.nn.DataParallel(ClipClassifier(**kwargs))
     clf = clf.cuda()
     # clf.apply(weight_init)  # can not be used for vit

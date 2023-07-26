@@ -175,7 +175,7 @@ def track_parallel_progress(func,
     return results
 
 
-def track_iter_progress(tasks, bar_width=50, file=sys.stdout):
+def track_iter_progress(tasks, task_name="scoring" ,bar_width=50, file=sys.stdout):
     """Track the progress of tasks iteration or enumeration with a progress
     bar.
 
@@ -189,6 +189,7 @@ def track_iter_progress(tasks, bar_width=50, file=sys.stdout):
         list: The task results.
 
     """
+    # print(f'now doing "{task_name}"')
     if isinstance(tasks, tuple):
         assert len(tasks) == 2
         assert isinstance(tasks[0], Iterable)

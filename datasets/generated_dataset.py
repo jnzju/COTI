@@ -41,6 +41,6 @@ def generate_virtual_dataset(url: str, prompt: str, num_samples: int, temp_dir: 
         pnginfo = PngImagePlugin.PngInfo()
         pnginfo.add_text("parameters", response2.json().get("info"))
         image.save(osp.join(temp_dir, f'output_{idx}.png'), pnginfo=pnginfo)
-        generated_data_info.append({"no": i, "img": osp.join(temp_dir, f'output_{idx}.png'), "gt_label": 1})
+        generated_data_info.append({"img": osp.join(temp_dir, f'output_{idx}.png'), "gt_label": 1, "aesthetic_score": 0.0, 'type': 'val'})
 
     return generated_data_info

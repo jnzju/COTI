@@ -1,3 +1,4 @@
+import pathlib
 import requests
 import os
 import os.path as osp
@@ -25,6 +26,10 @@ def create_embedding(url, sd_path, category_name, nvpt: int = 8, overwrite_old: 
     print(f"Embedding created at: {path}")
     return path
 
+def clear_data_root(data_root) -> None:
+    txt_files = list(pathlib.Path(data_root).glob('*.txt'))
+    for txt in txt_files:
+        os.remove(txt)
 
 def embedding_training(server, sd_path, url, category_name, learn_rate=5e-4, batch_size=2, gradient_step=1,
                        data_root=None,
@@ -34,11 +39,12 @@ def embedding_training(server, sd_path, url, category_name, learn_rate=5e-4, bat
                        latent_sampling_method="once",
                        save_embedding_every=5,
                        template_filename=None,
-                       preview_prompt="a_photo_of_axolotl, axolotl, real_life",
+                       preview_prompt=None,
                        preview_negative_prompt="lowres, text, error, cropped, worst quality, low quality, "
                                                "normal quality, jpeg artifacts, signature, watermark, username, blurry",
                        preview_steps=50, preview_sampler_index=0, preview_cfg_scale=7,
                        preview_seed=-1, preview_width=768, preview_height=768):
+    clear_data_root(data_root=data_root)
     payload = {}
     if server == "gpu25":
         payload = {
@@ -62,7 +68,7 @@ def embedding_training(server, sd_path, url, category_name, learn_rate=5e-4, bat
             "create_image_every": save_embedding_every,
             "save_embedding_every": save_embedding_every,
             "template_filename": template_filename,
-            "save_image_with_stored_embedding": False,
+            "save_image_with_stored_embedding": True,
             "preview_from_txt2img": True,
             "preview_prompt": preview_prompt,
             "preview_negative_prompt": preview_negative_prompt,
@@ -74,7 +80,10 @@ def embedding_training(server, sd_path, url, category_name, learn_rate=5e-4, bat
             "preview_height": preview_height
         }
 
-        requests.post(url=f'{url}/sdapi/v1/train/embedding', json=payload)
+        info = requests.post(url=f'{url}/sdapi/v1/train/embedding', json=payload)
+        print('embedding info')
+        print(info.text)
+        # print('###########')
 
         embedding_path_list = [osp.join(log_directory, datetime.datetime.now().strftime("%Y-%m-%d"), category_name, 'embeddings',
                                         f"{category_name}-{initial_step + save_embedding_every * (i + 1)}.pt")

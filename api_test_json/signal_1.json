@@ -1,9 +1,11 @@
 {
-  "process_src": "/home/yangjn/zhangyanming/COTI/tasks/MyImageFolder_ScoreBasedSampling_2023-07-18-14-16_96475f80/sidewinder/active_round_init/selected_images/original",
-  "process_dst": "/home/yangjn/zhangyanming/COTI/tasks/MyImageFolder_ScoreBasedSampling_2023-07-18-14-16_96475f80/sidewinder/active_round_init/selected_images/processed",
+  "id_task": 0,
+  "process_src": "/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/tasks/2023-07-21-19-51_dcb38a2a/task_0/origin",
+  "process_dst": "/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/tasks/2023-07-21-19-51_dcb38a2a/task_0/prepocess",
   "process_width": 768,
   "process_height": 768,
   "preprocess_txt_action": "ignore",
+  "process_keep_original_size": "True",
   "process_flip": "False",
   "process_split": "False",
   "process_caption": "False"

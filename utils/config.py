@@ -20,7 +20,11 @@ def create_parser():
                         help=
                         'gpu25'
                         'gpu_school')
-    parser.add_argument('--task-path', default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/tasks', type=str)
+    parser.add_argument('--task-path', default=None, type=str)
+    parser.add_argument('--embed-task-path', default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/embed_tasks', type=str)
+    parser.add_argument('--hyper-task-path', default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/hyper_tasks', type=str)
+    parser.add_argument('--test-task-path', default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/test_tasks', type=str)
+    parser.add_argument('--task-num', default=10, type=int)
     parser.add_argument('--category', default='axolotl', type=str, help=
                         'axolotl'
                         'crampfish'
@@ -28,6 +32,7 @@ def create_parser():
                         'indian_cobra'
                         'lycorma_delicatula'
                         )
+    parser.add_argument('--class-idx',default=0, type=int)
     parser.add_argument('--subcategory', default='frilled_lizard', type=str, help=
                         'frilled_lizard'
                         'garfish'
@@ -35,14 +40,11 @@ def create_parser():
                         'sidewinder'
                         'xylotrechus'
                         )
+    parser.add_argument('--subclass-idx', default=3, type=int)
     
     # 与stable diffusion相关的配置
-    parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7867", type=str,
+    parser.add_argument('--stable-diffusion-url', default="http://127.0.0.1:7861", type=str,
                         help='the url of stable diffusion')
-    parser.add_argument('--categories', default=['sidewinder'], type=str,
-                        nargs='+', help='categories to train, choose from '
-                                        'axolotl, crampfish, emperor_penguin_chick, frilled_lizard, garfish, '
-                                        'indian_cobra, king_penguin_chick, lycorma_delicatula, sidewinder, xylotrechus')
     parser.add_argument('--stable-diffusion-model-path', default="/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/stable-diffusion-webui", type=str, 
                         help='example :  /storage/home/lanzhenzhongLab2/yangjianan/yangjianan/stable-diffusion-webui'
                                         '/home/yangjn/stable-diffusion-webui')
@@ -55,21 +57,15 @@ def create_parser():
     # 常规深度模型训练配置
     parser.add_argument('--dataset', type=str, default='MyImageFolder', metavar='DATASET',
                         help='The name of the used dataset(default: MyImageFolder)')
-    parser.add_argument('--dataset-path', type=str, default="/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset", 
-                        help="example :  /storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset"
-                                        "/home/yangjn/zhangyanming/data/stable_diffusion_dataset")
+    parser.add_argument('--dataset-path', type=str, default="/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset")
+    parser.add_argument('--training-dataset',type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset/training_dataset')
+    parser.add_argument('--training-dataset-initial',type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/stable_diffusion_dataset/training_dataset_initial')
     parser.add_argument('--cls-load-path', type=str, default=None, help='which pth file to preload')
     parser.add_argument('--scoring-load-path', type=str, default=None, help='which pth file to preload')
 
     # 主动学习策略选择
     parser.add_argument('--strategy', type=str, default='ScoreBasedSampling',
                         help='which sampling strategy to choose')
-    parser.add_argument('--n-cycle', default=2, type=int,
-                        metavar='N', help='number of query rounds(default: 10), used: 5')
-    parser.add_argument('--num-query', default=100, type=int,
-                        metavar='N', help='number of query samples per epoch(default: 1000)')
-    parser.add_argument('--subset', default=10000, type=int,
-                        metavar='N', help='the size of the unlabeled pool to query, subsampling')
     parser.add_argument('--updating', action='store_true', help='Whether to use updating or retraining')
 
     # 分类模型训练配置
@@ -104,11 +100,8 @@ def create_parser():
     parser.add_argument('--validation-batch-size', default=64, type=int, metavar='N',
                         help='number of data loading workers (default: 64)')
     # 图像生成配置
-    parser.add_argument('--initial-generated-images-per-class', default=1000, type=int,
-                        help='number of images generated for training per class,'
-                             'only available when there are no generated images in the dataset')
-    parser.add_argument('--validation-generated-images-per-class', default=10, type=int,
-                        help='number of images generated for validation per cycle')
+    parser.add_argument('--validation-generated-images-per-class', default=500, type=int,
+                        help='number of images generated for validation per cycle, used: 10')
 
     # Random Seed
     parser.add_argument('--seed', default=None, type=int, metavar='SEED', help='Random seed (default: None)')
@@ -117,24 +110,39 @@ def create_parser():
     parser.add_argument('--out-iter-freq', default=1, type=int)
 
     # 与embedding和hypernetwork训练相关的配置
-    parser.add_argument('--embedding-steps-per-lr', default=100, type=int)
-    parser.add_argument('--save-embedding-every', default=5, type=int)
+    parser.add_argument('--sd-train-method', default='embed', type=str, help=
+                        'embed'
+                        'hyper'
+                        'testembed'
+                        'testhyper'
+                        )
+    
     parser.add_argument('--embedding-learn-rate', default=[5e-4, 2.5e-4, 7.5e-5, 5e-5, 2.5e-5], type=float, nargs='+',
-                        help='learning rate to use in embedding training')
+                        help=
+                        'learning rate to use in embedding training'
+                        '[5e-4, 2.5e-4, 7.5e-5, 5e-5, 2.5e-5]'
+                        )
     parser.add_argument('--hypernetwork-steps-per-lr', default=100, type=int)
-    parser.add_argument('--save-hypernetwork-every', default=5, type=int)
+    parser.add_argument('--save-hypernetwork-every', default=50, type=int)
     parser.add_argument('--hypernetwork-learn-rate', default=[5e-6, 2.5e-6, 7.5e-7, 5e-7, 2.5e-7], type=float,
-                        nargs='+', help='learning rate to use in hypernetwork training')
+                        nargs='+', help=
+                        'learning rate to use in hypernetwork training'
+                        '[5e-6, 2.5e-6, 7.5e-7, 5e-7, 2.5e-7]'
+                        )
     
     # memory bank相关配置
-    parser.add_argument('--memory-bank-path', type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/memorybank',
+    parser.add_argument('--mb-path', type=str, default=None,
                         help=   "/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/memorybank"
                                 "/home/yangjn/zhangyanming/data/memorybank")
-    parser.add_argument('--mb-save-num',type=int, default=50, help='every time select mb_save_num images to store')
-    parser.add_argument('--mb-load-num',type=int, default=50, help='every time select mb_load_num images to load')
+    parser.add_argument('--mb-path-embed', type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/embed_memorybank')
+    parser.add_argument('--mb-path-hyper', type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/hyper_memorybank')
+    parser.add_argument('--mb-path-test', type=str, default='/storage/home/lanzhenzhongLab2/yangjianan/yangjianan/zhangyanming/data/test_memorybank')
+    parser.add_argument('--mb-save-num',type=int, default=200, help='every time select mb_save_num images to store')
+    parser.add_argument('--mb-load-num',type=int, default=200, help='every time select mb_load_num images to load')
+    parser.add_argument('--mb-size', type=int, default=400)
 
     # tag matching score相关配置
-    parser.add_argument('--tag-matching-strategy', default='representation_distance', type=str, 
+    parser.add_argument('--tag-matching-strategy', default='binary_classification', type=str, 
                         help='please choose between these strategies:'  
                         'binary_classification'                         #这个就是南哥实现的
                         'representation_distance'                       #这个是使用clip预训练模型进行图文匹配

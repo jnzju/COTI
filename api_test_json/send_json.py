@@ -3,7 +3,7 @@ import json
 import os.path as osp
 import time
 
-url = "http://127.0.0.1:7867"
+url = "http://127.0.0.1:7861"
 
 
 def create_embedding(url, category_name, nvpt: int = 8, overwrite_old: bool = False):
@@ -33,7 +33,7 @@ def send_singal(file_path):
     response = requests.post(url=f'{url}/sdapi/v1/preprocess', json=payload)
     # response = requests.post(url=f'{url}/sdapi/v1/txt2img', json=payload)
     print(response)
-    print(response.json())
+    print(response.text)
 
 
 if __name__ == '__main__':
